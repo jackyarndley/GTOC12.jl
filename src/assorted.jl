@@ -117,8 +117,8 @@ function find_best_lambert_transfer(
 end
 
 function get_lambert_trajectory(
+    id_journey,
     times_journey,
-    id_journey
 )
     Δv_journey_combined = zeros(Float64, 3, 0)
     Δv_journey_departure = zeros(Float64, 3, 0)
@@ -858,8 +858,8 @@ function get_transfer_dv_low_thrust(id_start, time_start, id_set, Δt; start_mas
         id_journey = [id_start, id]
 
         locations_journey, Δv_journey_combined, Δv_journey_departure, Δv_journey_arrival = get_lambert_trajectory(
+            id_journey,
             times_journey,
-            id_journey
         )
 
         x_departure_cartesian, x_arrival_cartesian, t_nodes, u_nodes, Δv_departure_injection, Δv_departure_injection_limit, Δv_arrival_injection, Δv_arrival_injection_limit = get_lambert_guess_for_scp(
@@ -1145,8 +1145,8 @@ function get_control_for_all_plotting(
         )
     
         locations_journey, Δv_journey_combined, Δv_journey_departure, Δv_journey_arrival = get_lambert_trajectory(
+            id_journey,
             times_journey,
-            id_journey
         )
     
         x_departure_cartesian, x_arrival_cartesian, t_nodes, u_nodes, Δv_departure_injection, Δv_departure_injection_limit, Δv_arrival_injection, Δv_arrival_injection_limit = get_lambert_guess_for_scp(
@@ -1477,4 +1477,68 @@ function ephemeris_cartesian_at(classical, times; μ=1.0)
     out = stack(classical_to_cartesian.(eachslice(out_classical; dims=3); μ))
 
     return out
+end
+
+
+function get_mass_change_callback_constant(
+    times,
+    mass_change::Float64
+)
+    affect!(integrator) = begin
+        integrator.u[7] = log(exp(integrator.u[7]) + mass_change)
+    end
+
+    return PresetTimeCallback(times, affect!)
+end
+
+function get_mass_change_callback_dynamic(
+    times,
+    mass_change::Vector{Float64}
+)
+    callbacks = [
+        begin
+            affect!(integrator) = begin
+                integrator.u[7] += mass_change[i]
+            end
+        
+            PresetTimeCallback([times[i]], affect!)
+        end 
+    for i in 1:length(times)]
+
+    return CallbackSet(callbacks...)
+end
+
+function get_log_mass_change_callback_dynamic(
+    times,
+    mass_change::Vector{Float64}
+)
+    callbacks = [
+        begin
+            affect!(integrator) = begin
+                integrator.u[7] = log(exp(integrator.u[7]) + mass_change[i])
+            end
+        
+            PresetTimeCallback([times[i]], affect!)
+        end 
+    for i in 1:length(times)]
+
+    return CallbackSet(callbacks...)
+end
+
+
+function get_gravity_assist_callback(
+    times,
+    velocity_change
+)
+    callbacks = [
+        begin
+            affect!(integrator) = begin
+                integrator.u[4:6] += velocity_change[i]
+            end
+        
+            PresetTimeCallback([times[i]], affect!)
+        end 
+    for i in 1:length(times)]
+
+    return CallbackSet(callbacks...)
 end

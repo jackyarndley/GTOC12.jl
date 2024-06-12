@@ -18,6 +18,7 @@ include("lambert.jl")
 include("scp.jl")
 include("transforms.jl")
 include("plotting.jl")
+include("mip.jl")
 
 # Scaling constants
 μ = 1.32712440018e11 # km^3 / s^2
