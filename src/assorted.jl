@@ -366,6 +366,139 @@ function process_output_for_plotting(times_journey, t_nodes, u_nodes)
     return t_nodes_total, u_nodes_total
 end
 
+
+function get_lambert_guess_for_scp(
+    id_journey,
+    times_journey;
+    objective_config = LoggedMassConfig()
+)
+    mixing = length(id_journey)
+
+    t_nodes = Vector{Vector{Float64}}[]
+    u_nodes = Vector{Matrix{Float64}}[]
+    x_nodes = Vector{Matrix{Float64}}[]
+    x0 = Vector{Vector{Float64}}[]
+    xf = Vector{Vector{Float64}}[]
+    Δv0 = Vector{Vector{Float64}}[]
+    Δvf = Vector{Vector{Float64}}[]
+    Δv0_limit = Vector{Float64}[]
+    Δvf_limit = Vector{Float64}[]
+    Δm0 = Vector{Float64}[]
+
+    for n in 1:mixing
+        segments = length(id_journey[n]) - 1
+
+        locations_journey, _, Δv0_lam, Δvf_lam = get_lambert_trajectory(
+            id_journey[n],
+            times_journey[n],
+        )
+
+        push!(Δm0, get_mass_change_at_ids_mixed(
+            id_journey[n],
+            times_journey[n],
+            id_journey,
+            times_journey
+        ))
+
+        push!(x0, fill(Float64[], segments))
+        push!(xf, fill(Float64[], segments))
+
+        push!(t_nodes, fill(Float64[], segments))
+        push!(x_nodes, fill(Matrix{Float64}(undef, 0, 0), segments))
+        push!(u_nodes, fill(Matrix{Float64}(undef, 0, 0), segments))
+
+        push!(Δv0, fill(Float64[], segments))
+        push!(Δvf, fill(Float64[], segments))
+
+        push!(Δv0_limit, fill(0.0, segments))
+        push!(Δvf_limit, fill(0.0, segments))
+        
+        for i in 1:segments
+            # When a transfer is very long the Lambert is not a good guess so just use a zero one
+            if ((Δm0[n][i] < 0.0) && (Δm0[n][i+1] > 0.0))
+                Δv0_lam[:, i] *= 0.0
+                Δvf_lam[:, i] *= 0.0
+            end
+
+            # Only allow departure or arrival Δv at the beginning and end
+            Δv0[n][i], Δv0_limit[n][i] = calculate_Δv_injection_from_lambert(Δv0_lam[:, i], id_journey[n][i] == 0)
+            Δvf[n][i], Δvf_limit[n][i] = calculate_Δv_injection_from_lambert(Δvf_lam[:, i], (i == segments) && id_journey[n][i+1] == -3)
+
+            # Gravity assist departure
+            if id_journey[n][i] < 0
+                Δv0[n][i], Δv0_limit[n][i] = calculate_Δv_injection_from_lambert(Δv0_lam[:, i], true; limit = 50.0 / v_scale)
+            end
+        
+            # Gravity assist arrival
+            if id_journey[n][i + 1] < 0 && (i != segments)
+                Δvf[n][i], Δvf_limit[n][i] = calculate_Δv_injection_from_lambert(Δvf_lam[:, i], true; limit = 50.0 / v_scale)
+            end
+        end
+
+        m0 = 3000.0 / m_scale
+
+        for i in 1:segments
+            Δt_segment = times_journey[n][i+1] - times_journey[n][i]
+
+            t_nodes_segment = collect(0.0:node_time_spacing:(Δt_segment - Δt_segment % node_time_spacing))
+
+            if !(t_nodes_segment[end] ≈ Δt_segment)
+                t_nodes_segment = vcat(t_nodes_segment, Δt_segment)
+            end
+        
+            if id_journey[n][i] == id_journey[n][i + 1]
+                t_nodes_segment = [0.0, Δt_segment/2, Δt_segment]
+            end
+            
+            nodes = length(t_nodes_segment)
+
+            # Get mass estimate with lambert burn
+            mf = m0/exp((norm(Δv0_lam[:, i] .- Δv0[n][i]) + norm(Δvf_lam[:, i] .- Δvf[n][i])) / g0_isp)
+
+            if typeof(objective_config) == LoggedMassConfig()
+                x0[n][i] = vcat(locations_journey[:, i], log(m0))
+                xf[n][i] = vcat(locations_journey[:, i+1], log(mf))
+            else
+                x0[n][i] = vcat(locations_journey[:, i], m0)
+                xf[n][i] = vcat(locations_journey[:, i+1], mf)
+            end
+        
+            t_nodes[n][i] = t_nodes_segment
+
+            u_nodes[n][i] = control_guess_from_lambert_impulsive(
+                Δv0_lam[:, i], 
+                Δvf_lam[:, i],
+                Δv0[n][i],
+                Δvf[n][i],
+                t_nodes_segment[2:end] .- t_nodes_segment[1:(end-1)],
+                nodes - 1
+            )
+
+            temp = deepcopy(x0[n][i])
+            temp[4:6] .+= Δv0[n][i]
+
+            x_nodes[n][i] = propagate_spacecraft(
+                temp,
+                t_nodes[n][i];
+                t_nodes = t_nodes[n][i],
+                u_nodes = u_nodes[n][i],
+                objective_config,
+            )
+        
+            # Apply the mass change
+            m0 = mf + Δm0[n][i + 1]
+        end
+    end
+    
+    return t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0
+end
+
+
+
+
+
+
+
 function get_lambert_guess_for_scp(
     Δv_journey_departure,
     Δv_journey_arrival,

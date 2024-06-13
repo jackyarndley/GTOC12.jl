@@ -102,7 +102,7 @@ function propagate_spacecraft(
     t_nodes = Float64[], 
     u_nodes = zeros(0, 0), 
     coordinate_config::CoordinateConfig = CartesianConfig(), 
-    thrust_config::ThrustConfig = ImpulsiveConfig(),
+    thrust_config::ThrustConfig = ZeroOrderHoldConfig(),
     objective_config::ObjectiveConfig = VelocityConfig(),
     extra_callback = nothing
 ) where T
