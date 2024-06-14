@@ -43,7 +43,7 @@ function SequentialConvexProblem(
     times_journey;
     objective_config = LoggedMassConfig(),
     dynamical_error = 1e-6,
-    trust_region_factor = 1e-3
+    trust_region_factor = 0.1
 )
     t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0 = get_lambert_guess_for_scp(id_journey, times_journey)
 
@@ -89,18 +89,12 @@ prob = SequentialConvexProblem(id_journey, times_journey)
 
 function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
 
-
     mixing = length(p.t_nodes)
 
     model = Model(p.optimizer)
     set_silent(model)
 
-
-
-    
-
     s_nodes = [[fill(1.0, length(t_nodes) - 1) for t_nodes in t_nodes] for t_nodes in p.t_nodes]
-
 
     # State variables
     x = [[] for _ in 1:mixing]
@@ -123,7 +117,7 @@ function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
     x_violation = [[] for _ in 1:mixing]
 
     # Terminal mass violation
-    m_violation = [@variable(model, lower_bound = 0.0) for _ in 1:mixing]
+    m_violation = [@variable(model, lower_bound = 0.0, upper_bound = 1000.0) for _ in 1:mixing]
     Δt_start = [@variable(model) for _ in 1:mixing]
 
     for n in 1:mixing
@@ -148,22 +142,26 @@ function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
             @constraint(model, [i=1:(nodes-1)], [u[n][k][4, i]; u[n][k][1:3, i]] in SecondOrderCone())
 
             # SOC constraint for injection Δv
-            @constraint(model, [Δv0_limit[n][k]; Δv0[n][k][1:3]] in SecondOrderCone())
-            @constraint(model, [Δvf_limit[n][k]; Δvf[n][k][1:3]] in SecondOrderCone())
+            @constraint(model, [p.Δv0_limit[n][k]; Δv0[n][k][1:3]] in SecondOrderCone())
+            @constraint(model, [p.Δvf_limit[n][k]; Δvf[n][k][1:3]] in SecondOrderCone())
 
             # Ensure positivity of the violation
             @constraint(model, x_violation[n][k] .>= Δx0[n][k])
             @constraint(model, x_violation[n][k] .>= -Δx0[n][k])
             @constraint(model, x_violation[n][k] .>= Δxf[n][k])
             @constraint(model, x_violation[n][k] .>= -Δxf[n][k])
+
+            @constraint(model, s[n][k] .== 1.0)
         end
 
         # Limit maximum mass at start
         if typeof(p.objective_config) == LoggedMassConfig
-            @constraint(model, x[n][1][7, 1] <= 0.0)
+            @constraint(model, x[n][1][7, 1] <= log(3000/m_scale))
         else
-            @constraint(model, x[n][1][7, 1] <= 1.0)
+            @constraint(model, x[n][1][7, 1] <= 3000.0/m_scale)
         end
+
+        
     end
 
     # Variables for SCP convergence
@@ -258,7 +256,7 @@ function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
 
                 trust_region_dynamic_con[n][k] = @constraint(model,
                     [i=1:(nodes-1)],
-                    -5e1*p.trust_region_factor - 1e-3 .<= x[n][k][1:6, i] .- x_nodes[n][k][1:6, i] .<= 5e1*p.trust_region_factor + 1e-3
+                    -5e1*p.trust_region_factor - 1e-3 .<= x[n][k][1:6, i] .- p.x_nodes[n][k][1:6, i] .<= 5e1*p.trust_region_factor + 1e-3
                 )
 
                 start_position_function(time) = begin
@@ -363,9 +361,68 @@ function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
 
         JuMP.optimize!(model)
 
+        solution_summary(model)
+
+
+
+        JuMP.value.(x[1][1])
+
+        JuMP.value.(u[1][1])
+
+        JuMP.value.(s[1][1])
+
+        JuMP.value.(s[1][1])
+
+
+        # Things to do
+
+        # update times_journey
+        # Update mass changes
+        # Update u_nodes from control
+        # Update x_nodes from control
+        # Update Δt_nodes from control
+        # Update t_nodes from control
+
+        # Update Δv0, Δvf
+        # Update x0, xf
+
+
+        # Calculate errors 
+
+
+        # Display output
+
+
+
+        # Check for convergence
+
+
+        # Update trust region
+
         if i >= 10
             p.trust_region_factor = initial_trust_region_factor * ((scp_iterations - i) / (scp_iterations - 10))^2.0 + 5e-5
         end 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+
+
+
 
 
 
