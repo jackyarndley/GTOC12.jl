@@ -50,14 +50,12 @@ function plot_location_vertical_markers(
 end
 
 
-
-
-
-
 function plot_thrust_information(p::SequentialConvexProblem)
     mixing = length(p.x0)
 
-    f = Figure(size = (800, 300*mixing), backgroundcolor = :white)
+    f = Figure(size = (800, 250*mixing), backgroundcolor = :white)
+
+    axs = []
 
     for n in 1:mixing
         t_nodes_combined = vcat(
@@ -76,11 +74,16 @@ function plot_thrust_information(p::SequentialConvexProblem)
         
         ax = Axis(
             f[n, 1]; 
-            xlabel = "t [MJD]", 
+            xlabel = n == mixing ? "t [MJD]" : "", 
             ylabel = "thrust [N]", 
+            xticks = [65000, 66000, 67000, 68000, 69000],
+            yticks = [0.0, 0.6],
+            xgridvisible = false
         )
 
-        ylims!(ax, (-0.05 * maximum(thrust_force), 1.2 * maximum(thrust_force)))
+        push!(axs, ax)
+
+        ylims!(ax, (-0.05 * maximum(thrust_force), 1.25 * maximum(thrust_force)))
 
         plot_location_vertical_markers(
             ax, 
@@ -100,6 +103,7 @@ function plot_thrust_information(p::SequentialConvexProblem)
         )
     end
 
+    linkxaxes!(axs...)
     resize_to_layout!(f)
     display(f)
 
@@ -107,48 +111,90 @@ function plot_thrust_information(p::SequentialConvexProblem)
 end
 
 
-
-function plot_thrust_information(
-    id_journey,
-    times_journey,
-    mass_changes,
-    t_nodes,
-    u_nodes,
-    x0,
-    objective_config
+function plot_trajectory(
+    p::SequentialConvexProblem;
+    solution_index = 1
 )
-    x0 = copy(x0)
-    t_nodes_mjd = convert_time_to_mjd(t_nodes)
-    times_journey_mjd = convert_time_to_mjd(times_journey)
+    n = solution_index
 
-    t_nodes = t_nodes .- t_nodes[1]
+    f = Figure(size = (900, 800), backgroundcolor = :white)
 
-    if objective_config == LoggedMassConfig()
-        extra_callback = get_log_mass_change_callback_dynamic(times_journey .- times_journey[1], mass_changes)
-    else
-        extra_callback = get_mass_change_callback_dynamic(times_journey .- times_journey[1], mass_changes)
-    end
+    x_nodes_combined = hcat([val[:, 1:end-1] for val in p.x_nodes[n]]...)
 
-    x_nodes = propagate_spacecraft(
-        x0, 
-        t_nodes .+ 1e-10; 
-        t_nodes = t_nodes, 
-        u_nodes = u_nodes, 
-        thrust_config = ZeroOrderHoldConfig(),
-        objective_config,
-        extra_callback
+    display(x_nodes_combined)
+
+    ax1 = Axis(
+        f[1:2, 1:2]; 
+        xlabel = "x [AU]", 
+        ylabel = "y [AU]", 
+        aspect = 1
     )
 
-    display(x_nodes)
+    for k in 1:length(p.x0[n])
+        scatter!(ax1,
+            p.x0[n][k][1],
+            p.x0[n][k][2],
+        )
 
-    thrust_force = if objective_config == LoggedMassConfig()
-        temp = exp.(x_nodes[7, :])
-        u_nodes[4, :] .* temp * thrust * m_scale * a_scale * 1e3
-    else
-        u_nodes[4, :] * thrust * m_scale * a_scale * 1e3
+        if k == length(p.x0[n])
+            scatter!(ax1,
+                p.xf[n][k][1],
+                p.xf[n][k][2],
+            )
+        end
+
+        t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
+
+        if !(t_fine[end] ≈ p.t_nodes[n][k][end])
+            push!(t_fine, p.t_nodes[n][k][end])
+        end
+
+        x_fine = propagate_spacecraft(
+            p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+            t_fine;
+            t_nodes = p.t_nodes[n][k],
+            u_nodes = p.u_nodes[n][k],
+            p.objective_config,
+        )
+
+        lines!(ax1,
+            x_fine[1, :],
+            x_fine[2, :],
+        )
+
+
+
+        thrust_force = if p.objective_config == LoggedMassConfig()
+            temp = exp.(p.x_nodes[n][k][7, 1:end-1])
+            p.u_nodes[n][k][4, :] .* temp * thrust * m_scale * a_scale * 1e3
+        else
+            p.u_nodes[n][k][4, :] * thrust * m_scale * a_scale * 1e3
+        end
+
+        sel = thrust_force .>= 0.01
+
+        thrust_vectors = stack(normalize.(eachcol(p.u_nodes[n][k][1:3, :]))).*thrust_force'
+
+        arrows!(ax1,
+            p.x_nodes[n][k][1, 1:end-1][sel],
+            p.x_nodes[n][k][2, 1:end-1][sel],
+            thrust_vectors[1, sel],
+            thrust_vectors[2, sel],
+            lengthscale = 0.2,
+            arrowhead = ' ',
+            linecolor = (:black, 0.4),
+        )
+
     end
 
 
+
+
+    limits!(ax1, -3.0, 3.0, -3.0, 3.0)
+
+    # hidedecorations!(
+    #     ax1
+    # )
 
     resize_to_layout!(f)
     display(f)

@@ -39,11 +39,9 @@ function SequentialConvexProblem(
 )
     t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0 = get_lambert_guess_for_scp(id_journey, times_journey; objective_config)
 
-    # display(x0[1][1])
-
     return SequentialConvexProblem(
-        id_journey,
-        times_journey,
+        deepcopy(id_journey),
+        deepcopy(times_journey),
         t_nodes,
         u_nodes,
         x_nodes,
@@ -62,13 +60,16 @@ function SequentialConvexProblem(
 end
 
 
-function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
+function solve!(
+    p::SequentialConvexProblem, 
+    ::MixedTimeAdaptive;
+    adaptive_time = true
+)
     mixing = length(p.t_nodes)
 
     model = Model(p.optimizer)
     set_silent(model)
-
-    s_nodes = [[fill(1.0, length(t_nodes) - 1) for t_nodes in t_nodes] for t_nodes in p.t_nodes]
+    set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-4)
 
     # State variables
     x = [[] for _ in 1:mixing]
@@ -125,10 +126,14 @@ function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
             @constraint(model, x_violation[n][k] .>= Δxf[n][k])
             @constraint(model, x_violation[n][k] .>= -Δxf[n][k])
 
-            @constraint(model, s[n][k] .== 1.0)
+            if !adaptive_time
+                @constraint(model, s[n][k] .== 1.0)
+            end
         end
 
-        @constraint(model, Δt_start[n] .== 0.0)
+        if !adaptive_time
+            @constraint(model, Δt_start[n] .== 0.0)
+        end
 
         # Limit maximum mass at start
         if typeof(p.objective_config) == LoggedMassConfig
@@ -164,7 +169,7 @@ function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
     for i in 1:scp_iterations
         Δt_nodes = [[t_nodes[2:end] .- t_nodes[1:(end-1)] for t_nodes in t_nodes] for t_nodes in p.t_nodes]
 
-        Δt_segments = [@expression(model, [i=1:segments],
+        Δt_segments = [@expression(model, [i=1:length(p.x0[n])],
             sum(s[n][i] .* Δt_nodes[n][i])
         ) for n in 1:mixing]
 
@@ -322,19 +327,22 @@ function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
             dropoff = p.Δm0[n] .≈ -40/m_scale
             pickup = p.Δm0[n] .> 0.0
 
-            # objective += sum(actual_time[n][pickup]) - sum(actual_time[n][dropoff])
-            objective += x[n][end][7, end]
+            if !adaptive_time
+                # objective += x[n][end][7, end]
+                objective -= x[n][1][7, 1]
+            else
+                objective += sum(actual_time[n][pickup]) - sum(actual_time[n][dropoff])
+            end
 
             objective -= 5e3*m_violation[n]
             objective -= 1e4*sum(sum.(x_violation[n]))
-            objective -= 1e-2*sum([sum(u[n][i][4, :].*Δt_nodes[n][i]) for i in 1:length(u[n])])
+            # objective -= 1e-2*sum([sum(u[n][i][4, :].*Δt_nodes[n][i]) for i in 1:length(u[n])])
         end
 
         @objective(model, 
             Max, 
             objective
         )
-
         
         JuMP.optimize!(model)
 
@@ -414,7 +422,7 @@ function solve!(p::SequentialConvexProblem, ::MixedTimeAdaptive)
             
             temp = @sprintf "%10.6e  %10.5f  %10.5f  %10.5f  %7.6f  %s" current_maximum_error start_mass*m_scale end_mass*m_scale -m_scale*p.Δm0[n][end] p.trust_region_factor termination_status(model)
 
-            if current_maximum_error[n] < p.dynamical_error
+            if current_maximum_error < p.dynamical_error
                 printstyled(temp; color=:green)
             else
                 printstyled(temp; color=:red)

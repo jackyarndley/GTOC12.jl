@@ -166,7 +166,8 @@ function propagate_spacecraft(
         Vern9();
         abstol=1e-12, 
         reltol=1e-12, 
-        callback=cb
+        callback=cb,
+        saveat = t_out
     )(t_out))
 
     # Remove the initial Δv that was added if it lines up with the first node
