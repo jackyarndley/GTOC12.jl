@@ -455,7 +455,7 @@ function get_lambert_guess_for_scp(
             # Get mass estimate with lambert burn
             mf = m0/exp((norm(Δv0_lam[:, i] .- Δv0[n][i]) + norm(Δvf_lam[:, i] .- Δvf[n][i])) / g0_isp)
 
-            if typeof(objective_config) == LoggedMassConfig()
+            if typeof(objective_config) == LoggedMassConfig
                 x0[n][i] = vcat(locations_journey[:, i], log(m0))
                 xf[n][i] = vcat(locations_journey[:, i+1], log(mf))
             else

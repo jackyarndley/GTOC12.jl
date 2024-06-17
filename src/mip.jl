@@ -66,8 +66,6 @@ function mip_ordering_mixing(
 
     Δv_collect = [@expression(model, [i=1:journey_length], sum([sum(collector[n][i, j, :] .* get_transfer_dv(subset_ids[j], times_collect[n][i], subset_ids, times_collect[n][i + 1] - times_collect[n][i])) for j in 1:length(subset_ids)])) for n in 1:length(collector)]
 
-
-
     cutoff = transfer_dv_limit/v_scale
 
     [@constraint(model, [i=1:journey_length, j=1:length(subset_ids), k=1:length(subset_ids); get_transfer_dv(subset_ids[j], times_deploy[n][i], subset_ids[k], times_deploy[n][i + 1] - times_deploy[n][i])[1] >= cutoff], deployer[n][i, j, k] == 0) for n in 1:length(deployer)]

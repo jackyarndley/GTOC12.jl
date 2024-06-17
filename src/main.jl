@@ -434,26 +434,53 @@ mass_starting = min(1.0, x_nodes[1][7, 1])
 
 ga_times, ga_amount = get_gravity_assist_information(times_journey, id_journey, Δv_departure_injection, Δv_arrival_injection)
 
-t_nodes_total, u_nodes_total = process_output_for_plotting(times_journey, t_nodes, u_nodes)
-
-x_initial_departure_cartesian = locations_journey[:, 1]
-x_initial_departure_cartesian[4:6] .+= Δv_departure_injection[1]
-x_initial_departure_cartesian = vcat(x_initial_departure_cartesian, mass_starting)
-# x_initial_departure_cartesian = vcat(x_initial_departure_cartesian, mass_starting - 40/m_scale)
 
 
+
+
+
+p = SequentialConvexProblem(id_journey, times_journey);
+
+solve!(p, MixedTimeAdaptive())
+
+
+plot_thrust_information(p)
+
+
+
+
+for i in 1:length(p.u_nodes[1])
+    display(maximum(norm.(norm.(eachcol(p.u_nodes[1][i][1:3, :])) .- p.u_nodes[1][i][4, :])))
+end
+
+
+
+
+
+t_nodes_total, u_nodes_total = process_output_for_plotting(p.times_journey[1], p.t_nodes[1], p.u_nodes[1])
+
+
+
+
+x_initial_departure_cartesian = p.x0[1][1]
+x_initial_departure_cartesian[4:6] .+= p.Δv0[1][1]
 
 
 
 plot_thrust_information(
-    id_journey,
-    times_journey,
-    mass_changes,
+    p.id_journey[1],
+    p.times_journey[1],
+    p.Δm0[1],
     t_nodes_total, 
     u_nodes_total, 
     x_initial_departure_cartesian,
-    MassConfig()
+    LoggedMassConfig()
 )
+
+
+
+
+
 
 plot_ship_trajectory_low_thrust(
     t_nodes_total, 
