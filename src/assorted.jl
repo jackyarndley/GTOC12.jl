@@ -76,8 +76,10 @@ function ephermeris_cartesian_from_id(id, times)
         ephemeris_cartesian_at(planets_classical[:, -id - 1], times)
     elseif id == 0
         ephemeris_cartesian_at(planets_classical[:, 2], times)
-    else
+    elseif id <= 60000
         ephemeris_cartesian_at(asteroids_classical[:, id], times)
+    else
+        ephemeris_cartesian_at(custom_classical[:, id - 60000], 0.0)
     end
 end
 
@@ -249,6 +251,8 @@ function get_mass_change_at_ids_mixed(
         elseif id_journey[i] == -3
             mass_change[i] = -sum(mass_change[mass_change .> 0.0])
             continue
+        elseif id_journey[i] > 60000
+            continue
         end
 
         for j in eachindex(id_journey_all)
@@ -291,7 +295,7 @@ function convert_log_mass_control_to_mass_control(
     for i in 1:length(u_nodes)
         x_departure_cartesian[i][7] = exp(x_current[7])
 
-        x_nodes_segment = propagate_spacecraft(
+        x_nodes_segment = integrate_trajectory(
             x_current, 
             t_nodes[i]; 
             t_nodes = t_nodes[i], 
@@ -367,6 +371,116 @@ function process_output_for_plotting(times_journey, t_nodes, u_nodes)
 end
 
 
+function get_ballistic_guess_for_scp(
+    id_journey,
+    times_journey;
+    objective_config = LoggedMassConfig()
+)
+    mixing = length(id_journey)
+
+    t_nodes = Vector{Vector{Float64}}[]
+    u_nodes = Vector{Matrix{Float64}}[]
+    x_nodes = Vector{Matrix{Float64}}[]
+    x0 = Vector{Vector{Float64}}[]
+    xf = Vector{Vector{Float64}}[]
+    Δv0 = Vector{Vector{Float64}}[]
+    Δvf = Vector{Vector{Float64}}[]
+    Δv0_limit = Vector{Float64}[]
+    Δvf_limit = Vector{Float64}[]
+    Δm0 = Vector{Float64}[]
+
+    for n in 1:mixing
+        segments = length(id_journey[n]) - 1
+
+        push!(Δm0, get_mass_change_at_ids_mixed(
+            id_journey[n],
+            times_journey[n],
+            id_journey,
+            times_journey
+        ))
+
+        push!(x0, fill(Float64[], segments))
+        push!(xf, fill(Float64[], segments))
+
+        push!(t_nodes, fill(Float64[], segments))
+        push!(x_nodes, fill(Matrix{Float64}(undef, 0, 0), segments))
+        push!(u_nodes, fill(Matrix{Float64}(undef, 0, 0), segments))
+
+        push!(Δv0, fill(Float64[], segments))
+        push!(Δvf, fill(Float64[], segments))
+
+        push!(Δv0_limit, fill(0.0, segments))
+        push!(Δvf_limit, fill(0.0, segments))
+        
+        m0 = 1000.0 / m_scale
+
+        for i in 1:segments
+            Δv0[n][i] = [0.0, 0.0, 0.0]
+            Δv0_limit[n][i] = 0.0
+            Δvf[n][i] = [0.0, 0.0, 0.0]
+            Δvf_limit[n][i] = 0.0
+
+            Δt_segment = times_journey[n][i+1] - times_journey[n][i]
+
+            t_nodes_segment = collect(0.0:node_time_spacing:(Δt_segment - Δt_segment % node_time_spacing))
+
+            if !(t_nodes_segment[end] ≈ Δt_segment)
+                t_nodes_segment = vcat(t_nodes_segment, Δt_segment)
+            end
+        
+            if id_journey[n][i] == id_journey[n][i + 1]
+                t_nodes_segment = [0.0, Δt_segment/2, Δt_segment]
+            end
+            
+            nodes = length(t_nodes_segment)
+
+            mf = m0
+
+            x0[n][i] = ephermeris_cartesian_from_id(
+                id_journey[n][i], 
+                times_journey[n][i]
+            )[:]
+
+            xf[n][i] = ephermeris_cartesian_from_id(
+                id_journey[n][i+1], 
+                times_journey[n][i+1]
+            )[:]
+
+
+            if typeof(objective_config) == LoggedMassConfig
+                x0[n][i] = vcat(x0[n][i], log(m0))
+                xf[n][i] = vcat(xf[n][i], log(mf))
+            else
+                x0[n][i] = vcat(x0[n][i], m0)
+                xf[n][i] = vcat(xf[n][i], mf)
+            end
+        
+            t_nodes[n][i] = t_nodes_segment
+
+            u_nodes[n][i] = zeros(4, nodes - 1)
+
+            temp = deepcopy(x0[n][i])
+            temp[4:6] .+= Δv0[n][i]
+
+            x_nodes[n][i] = integrate_trajectory(
+                temp,
+                t_nodes[n][i];
+                t_nodes = t_nodes[n][i],
+                u_nodes = u_nodes[n][i],
+                objective_config,
+            )
+        
+            # Apply the mass change
+            m0 = mf + Δm0[n][i + 1]
+        end
+    end
+    
+    return t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0
+end
+
+
+
+
 function get_lambert_guess_for_scp(
     id_journey,
     times_journey;
@@ -424,15 +538,15 @@ function get_lambert_guess_for_scp(
             Δv0[n][i], Δv0_limit[n][i] = calculate_Δv_injection_from_lambert(Δv0_lam[:, i], id_journey[n][i] == 0)
             Δvf[n][i], Δvf_limit[n][i] = calculate_Δv_injection_from_lambert(Δvf_lam[:, i], (i == segments) && id_journey[n][i+1] == -3)
 
-            # Gravity assist departure
-            if id_journey[n][i] < 0
-                Δv0[n][i], Δv0_limit[n][i] = calculate_Δv_injection_from_lambert(Δv0_lam[:, i], true; limit = 50.0 / v_scale)
-            end
+            # # Gravity assist departure
+            # if id_journey[n][i] < 0
+            #     Δv0[n][i], Δv0_limit[n][i] = calculate_Δv_injection_from_lambert(Δv0_lam[:, i], true; limit = 50.0 / v_scale)
+            # end
         
-            # Gravity assist arrival
-            if id_journey[n][i + 1] < 0 && (i != segments)
-                Δvf[n][i], Δvf_limit[n][i] = calculate_Δv_injection_from_lambert(Δvf_lam[:, i], true; limit = 50.0 / v_scale)
-            end
+            # # Gravity assist arrival
+            # if id_journey[n][i + 1] < 0 && (i != segments)
+            #     Δvf[n][i], Δvf_limit[n][i] = calculate_Δv_injection_from_lambert(Δvf_lam[:, i], true; limit = 50.0 / v_scale)
+            # end
         end
 
         m0 = 3000.0 / m_scale
@@ -477,7 +591,7 @@ function get_lambert_guess_for_scp(
             temp = deepcopy(x0[n][i])
             temp[4:6] .+= Δv0[n][i]
 
-            x_nodes[n][i] = propagate_spacecraft(
+            x_nodes[n][i] = integrate_trajectory(
                 temp,
                 t_nodes[n][i];
                 t_nodes = t_nodes[n][i],
@@ -493,103 +607,6 @@ function get_lambert_guess_for_scp(
     return t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0
 end
 
-
-
-
-
-
-
-function get_lambert_guess_for_scp(
-    Δv_journey_departure,
-    Δv_journey_arrival,
-    locations_journey,
-    id_journey,
-    times_journey,
-    mass_current,
-    mass_changes;
-    reverse_mass = false,
-    ignore_long_transfers = true,
-)
-    Δv_journey_departure = copy(Δv_journey_departure)
-    Δv_journey_arrival = copy(Δv_journey_arrival)
-
-    x_departure_cartesian = fill(Float64[], segments)
-    x_arrival_cartesian = fill(Float64[], segments)
-    t_nodes = fill(Float64[], segments)
-    u_nodes = fill(Matrix{Float64}(undef, 0, 0), segments)
-    Δv_departure_injection = fill(Float64[], segments)
-    Δv_departure_injection_limit = fill(0.0, segments)
-    Δv_arrival_injection = fill(Float64[], segments)
-    Δv_arrival_injection_limit = fill(0.0, segments)
-    
-    for i in 1:segments
-        # When a transfer is very long the Lambert is not a good guess so just use a zero one
-        if ignore_long_transfers && ((mass_changes[i] < 0.0) && (mass_changes[i+1] > 0.0))
-            Δv_journey_departure[:, i] *= 0.0
-            Δv_journey_arrival[:, i] *= 0.0
-        end
-
-        # Only allow departure or arrival Δv at the beginning and end
-        Δv_departure_injection[i], Δv_departure_injection_limit[i] = calculate_Δv_injection_from_lambert(Δv_journey_departure[:, i], id_journey[i] == 0)
-        Δv_arrival_injection[i], Δv_arrival_injection_limit[i] = calculate_Δv_injection_from_lambert(Δv_journey_arrival[:, i], (i + 1) == length(id_journey) && id_journey[i+1] == -3)
-
-        # Gravity assist departure
-        if id_journey[i] < 0
-            Δv_departure_injection[i], Δv_departure_injection_limit[i] = calculate_Δv_injection_from_lambert(Δv_journey_departure[:, i], true; limit = 50.0 / v_scale)
-        end
-    
-        # Gravity assist arrival
-        if id_journey[i + 1] < 0 && (i + 1) != length(id_journey)
-            Δv_arrival_injection[i], Δv_arrival_injection_limit[i] = calculate_Δv_injection_from_lambert(Δv_journey_arrival[:, i], true; limit = 50.0 / v_scale)
-        end
-    end
-
-    for i in 1:segments
-        t_max = times_journey[i+1] - times_journey[i]
-        t_nodes_segment = collect(0.0:node_time_spacing:(t_max - t_max % node_time_spacing))
-
-        if !(t_nodes_segment[end] ≈ t_max)
-            t_nodes_segment = vcat(t_nodes_segment, t_max)
-        end
-    
-        if id_journey[i] == id_journey[i + 1]
-            t_nodes_segment = [0.0, t_max/2, t_max]
-        end
-        
-        nodes = length(t_nodes_segment)
-
-        # Get mass estimate with lambert burn. In reverse mode this is more than before
-        mass_current, mass_end = if reverse_mass
-            mass_current*exp((norm(Δv_journey_departure[:, i] .- Δv_departure_injection[i]) + norm(Δv_journey_arrival[:, i] .- Δv_arrival_injection[i])) / g0_isp), mass_current
-        else
-            mass_current, mass_current/exp((norm(Δv_journey_departure[:, i] .- Δv_departure_injection[i]) + norm(Δv_journey_arrival[:, i] .- Δv_arrival_injection[i])) / g0_isp)
-        end
-    
-        u_nodes_segment = control_guess_from_lambert_impulsive(
-            Δv_journey_departure[:, i], 
-            Δv_journey_arrival[:, i],
-            Δv_departure_injection[i],
-            Δv_arrival_injection[i],
-            t_nodes_segment[2:end] .- t_nodes_segment[1:(end-1)],
-            nodes - 1
-        )
-
-        x_departure_cartesian[i] = vcat(locations_journey[:, i], mass_current)
-        x_arrival_cartesian[i] = vcat(locations_journey[:, i+1], mass_end)
-    
-        t_nodes[i] = t_nodes_segment
-        u_nodes[i] = u_nodes_segment
-    
-        # Apply the mass change for the linking constraints
-        if reverse_mass
-            mass_current = mass_current - mass_changes[i + 1]
-        else
-            mass_current = mass_end + mass_changes[i + 1]
-        end
-    end
-    
-    return x_departure_cartesian, x_arrival_cartesian, t_nodes, u_nodes, Δv_departure_injection, Δv_departure_injection_limit, Δv_arrival_injection, Δv_arrival_injection_limit
-end
 
 function get_gravity_assist_radius(va, vd, μ)
     δ = acos(dot(-normalize(va), normalize(vd)))

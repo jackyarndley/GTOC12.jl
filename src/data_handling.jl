@@ -102,7 +102,7 @@ function write_solution(
                 u_nodes[i][4, :] = norm.(eachcol(u_nodes[i][1:3, :]))
 
                 # Propagate to get the final mass
-                x_nodes = propagate_spacecraft(
+                x_nodes = integrate_trajectory(
                     x_current, 
                     t_nodes[i]; 
                     t_nodes = t_nodes[i], 

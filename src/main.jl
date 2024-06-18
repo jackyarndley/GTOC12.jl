@@ -516,7 +516,7 @@ p = SequentialConvexProblem(
 
 solve!(p,
     MixedTimeAdaptive(); 
-    adaptive_time = true
+    adaptive_time = false
 )
 
 

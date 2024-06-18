@@ -61,9 +61,12 @@ function plot_thrust_information(p::SequentialConvexProblem)
         t_nodes_combined = vcat(
             [p.t_nodes[n][k][1:end-1] .+ p.times_journey[n][k] for k in 1:length(p.x0[n])]...
         )
-
         u_nodes_combined = hcat(p.u_nodes[n]...)
         x_nodes_combined = hcat([val[:, 1:end-1] for val in p.x_nodes[n]]...)
+
+        push!(t_nodes_combined, p.times_journey[end][end])
+        u_nodes_combined = hcat(u_nodes_combined, p.u_nodes[end][end][:, end])
+        x_nodes_combined = hcat(x_nodes_combined, p.x_nodes[end][end][:, end])
 
         thrust_force = if p.objective_config == LoggedMassConfig()
             temp = exp.(x_nodes_combined[7, :])
@@ -76,7 +79,7 @@ function plot_thrust_information(p::SequentialConvexProblem)
             f[n, 1]; 
             xlabel = n == mixing ? "t [MJD]" : "", 
             ylabel = "thrust [N]", 
-            xticks = [65000, 66000, 67000, 68000, 69000],
+            # xticks = [65000, 66000, 67000, 68000, 69000],
             yticks = [0.0, 0.6],
             xgridvisible = false
         )
@@ -121,8 +124,6 @@ function plot_trajectory(
 
     x_nodes_combined = hcat([val[:, 1:end-1] for val in p.x_nodes[n]]...)
 
-    display(x_nodes_combined)
-
     ax1 = Axis(
         f[1:2, 1:2]; 
         xlabel = "x [AU]", 
@@ -149,7 +150,7 @@ function plot_trajectory(
             push!(t_fine, p.t_nodes[n][k][end])
         end
 
-        x_fine = propagate_spacecraft(
+        x_fine = integrate_trajectory(
             p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
             t_fine;
             t_nodes = p.t_nodes[n][k],

@@ -13,13 +13,13 @@ mutable struct SequentialConvexProblem{T <: Real}
     Δv0_limit::Vector{Vector{T}}
     Δvf_limit::Vector{Vector{T}}
     Δm0::Vector{Vector{T}}
+    mixing_number::Int64,
+    segment_number::Vector{Int64},
     objective_config::Union{MassConfig, LoggedMassConfig}
     dynamical_error::T
-    trust_region_factor::T
+    trust_region_factor::T,
     optimizer
 end
-
-
 
 abstract type SequentialConvexAlgorithm end
 
@@ -28,16 +28,140 @@ struct UnifiedTimeFixed <: SequentialConvexAlgorithm end
 struct MixedTimeAdaptive <: SequentialConvexAlgorithm end
 
 
-
-
-function SequentialConvexProblem(
+function create_gtoc12_scp(
     id_journey,
     times_journey;
     objective_config = LoggedMassConfig(),
     dynamical_error = 1e-6,
     trust_region_factor = 0.1,
 )
-    t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0 = get_lambert_guess_for_scp(id_journey, times_journey; objective_config)
+    mixing_number = length(id_journey)
+    segment_number = [length(id_journey[n]) - 1 for n in 1:mixing_number]
+
+    t_nodes = Vector{Vector{Float64}}[]
+    u_nodes = Vector{Matrix{Float64}}[]
+    x_nodes = Vector{Matrix{Float64}}[]
+    x0 = Vector{Vector{Float64}}[]
+    xf = Vector{Vector{Float64}}[]
+    Δv0 = Vector{Vector{Float64}}[]
+    Δvf = Vector{Vector{Float64}}[]
+    Δv0_limit = Vector{Float64}[]
+    Δvf_limit = Vector{Float64}[]
+    Δm0 = Vector{Float64}[]
+
+    for n in 1:mixing_number
+        segments = segment_number[n]
+
+        locations_journey, _, Δv0_lam, Δvf_lam = get_lambert_trajectory(
+            id_journey[n],
+            times_journey[n],
+        )
+
+        push!(Δm0, get_mass_change_at_ids_mixed(
+            id_journey[n],
+            times_journey[n],
+            id_journey,
+            times_journey
+        ))
+
+        push!(x0, fill(Float64[], segments))
+        push!(xf, fill(Float64[], segments))
+
+        push!(t_nodes, fill(Float64[], segments))
+        push!(x_nodes, fill(Matrix{Float64}(undef, 0, 0), segments))
+        push!(u_nodes, fill(Matrix{Float64}(undef, 0, 0), segments))
+
+        push!(Δv0, fill(Float64[], segments))
+        push!(Δvf, fill(Float64[], segments))
+
+        push!(Δv0_limit, fill(0.0, segments))
+        push!(Δvf_limit, fill(0.0, segments))
+        
+        for i in 1:segments
+            # When a transfer is very long the Lambert is not a good guess so just use a zero one
+            if ((Δm0[n][i] < 0.0) && (Δm0[n][i+1] > 0.0))
+                Δv0_lam[:, i] *= 0.0
+                Δvf_lam[:, i] *= 0.0
+            end
+
+            # Only allow departure or arrival Δv at the beginning and end
+            Δv0[n][i], Δv0_limit[n][i] = calculate_Δv_injection_from_lambert(Δv0_lam[:, i], id_journey[n][i] == 0)
+            Δvf[n][i], Δvf_limit[n][i] = calculate_Δv_injection_from_lambert(Δvf_lam[:, i], (i == segments) && id_journey[n][i+1] == -3)
+
+            # # Gravity assist departure
+            # if id_journey[n][i] < 0
+            #     Δv0[n][i], Δv0_limit[n][i] = calculate_Δv_injection_from_lambert(Δv0_lam[:, i], true; limit = 50.0 / v_scale)
+            # end
+        
+            # # Gravity assist arrival
+            # if id_journey[n][i + 1] < 0 && (i != segments)
+            #     Δvf[n][i], Δvf_limit[n][i] = calculate_Δv_injection_from_lambert(Δvf_lam[:, i], true; limit = 50.0 / v_scale)
+            # end
+        end
+
+        m0 = 3000.0 / m_scale
+
+        for i in 1:segments
+            Δt_segment = times_journey[n][i+1] - times_journey[n][i]
+
+            t_nodes_segment = collect(0.0:node_time_spacing:(Δt_segment - Δt_segment % node_time_spacing))
+
+            if !(t_nodes_segment[end] ≈ Δt_segment)
+                t_nodes_segment = vcat(t_nodes_segment, Δt_segment)
+            end
+        
+            if id_journey[n][i] == id_journey[n][i + 1]
+                t_nodes_segment = [0.0, Δt_segment/2, Δt_segment]
+            end
+            
+            nodes = length(t_nodes_segment)
+
+            # Get mass estimate with lambert burn
+            mf = m0/exp((norm(Δv0_lam[:, i] .- Δv0[n][i]) + norm(Δvf_lam[:, i] .- Δvf[n][i])) / g0_isp)
+
+            if typeof(objective_config) == LoggedMassConfig
+                x0[n][i] = vcat(locations_journey[:, i], log(m0))
+                xf[n][i] = vcat(locations_journey[:, i+1], log(mf))
+            else
+                x0[n][i] = vcat(locations_journey[:, i], m0)
+                xf[n][i] = vcat(locations_journey[:, i+1], mf)
+            end
+        
+            t_nodes[n][i] = t_nodes_segment
+
+            u_nodes[n][i] = control_guess_from_lambert_impulsive(
+                Δv0_lam[:, i], 
+                Δvf_lam[:, i],
+                Δv0[n][i],
+                Δvf[n][i],
+                t_nodes_segment[2:end] .- t_nodes_segment[1:(end-1)],
+                nodes - 1
+            )
+
+            temp = deepcopy(x0[n][i])
+            temp[4:6] .+= Δv0[n][i]
+
+            x_nodes[n][i] = integrate_trajectory(
+                temp,
+                t_nodes[n][i];
+                t_nodes = t_nodes[n][i],
+                u_nodes = u_nodes[n][i],
+                objective_config,
+            )
+        
+            # Apply the mass change
+            m0 = mf + Δm0[n][i + 1]
+        end
+    end
+    
+    return t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0
+
+
+
+
+
+
+
 
     return SequentialConvexProblem(
         deepcopy(id_journey),
@@ -58,6 +182,87 @@ function SequentialConvexProblem(
         Mosek.Optimizer
     )
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function SequentialConvexProblem(
+    id_journey,
+    times_journey;
+    objective_config = LoggedMassConfig(),
+    dynamical_error = 1e-6,
+    trust_region_factor = 0.1,
+)
+    t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0 = get_lambert_guess_for_scp(id_journey, times_journey; objective_config)
+    # t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0 = get_ballistic_guess_for_scp(id_journey, times_journey; objective_config)
+
+    return SequentialConvexProblem(
+        deepcopy(id_journey),
+        deepcopy(times_journey),
+        t_nodes,
+        u_nodes,
+        x_nodes,
+        x0,
+        xf,
+        Δv0,
+        Δvf,
+        Δv0_limit,
+        Δvf_limit,
+        Δm0,
+        objective_config,
+        dynamical_error,
+        trust_region_factor,
+        Mosek.Optimizer
+    )
+end
+
+
+function convert_logged_mass_to_mass!(
+    p::SequentialConvexProblem
+)
+    mixing = length(p.id_journey)
+
+    p.objective_config = MassConfig()
+
+    for n in 1:mixing
+        segments = length(id_journey[n]) - 1
+
+        for k in 1:segments
+            mass = exp.(p.x_nodes[n][k][7, :])
+
+            p.x0[n][k][7] = exp(p.x0[n][k][7])
+            p.xf[n][k][7] = exp(p.xf[n][k][7])
+
+            p.u_nodes[n][k][1, :] .*= mass[1:end-1]
+            p.u_nodes[n][k][2, :] .*= mass[1:end-1]
+            p.u_nodes[n][k][3, :] .*= mass[1:end-1]
+            p.u_nodes[n][k][4, :] .*= mass[1:end-1]
+
+            p.x_nodes[n][k] = integrate_trajectory(
+                p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+                p.t_nodes[n][k];
+                t_nodes = p.t_nodes[n][k],
+                u_nodes = p.u_nodes[n][k],
+                p.objective_config,
+            )
+        end
+    end
+
+    return
+end
+
+
 
 
 function solve!(
@@ -126,9 +331,9 @@ function solve!(
             @constraint(model, x_violation[n][k] .>= Δxf[n][k])
             @constraint(model, x_violation[n][k] .>= -Δxf[n][k])
 
-            if !adaptive_time
-                @constraint(model, s[n][k] .== 1.0)
-            end
+            # if !adaptive_time
+            #     @constraint(model, s[n][k] .== 1.0)
+            # end
         end
 
         if !adaptive_time
@@ -137,9 +342,9 @@ function solve!(
 
         # Limit maximum mass at start
         if typeof(p.objective_config) == LoggedMassConfig
-            @constraint(model, x[n][1][7, 1] <= log(3000/m_scale))
+            @constraint(model, x[n][1][7, 1] == log(1000/m_scale))
         else
-            @constraint(model, x[n][1][7, 1] <= 3000.0/m_scale)
+            @constraint(model, x[n][1][7, 1] == 1000.0/m_scale)
         end
     end
 
@@ -164,7 +369,7 @@ function solve!(
 
     # active_parts = collect(1:mixing)
 
-    initial_trust_region_factor = p.trust_region_factor
+    current_trust_region_factor = p.trust_region_factor
 
     for i in 1:scp_iterations
         Δt_nodes = [[t_nodes[2:end] .- t_nodes[1:(end-1)] for t_nodes in t_nodes] for t_nodes in p.t_nodes]
@@ -208,7 +413,14 @@ function solve!(
                 end
 
                 # Get the state transition matrices from automatic differentiation
-                stms = get_arc_stm_adaptive_time(Δt_nodes[n][k], p.x_nodes[n][k], p.u_nodes[n][k], CartesianConfig(), ZeroOrderHoldConfig(), p.objective_config)
+                stms = get_arc_stms_adaptive_time(
+                    Δt_nodes[n][k], 
+                    p.x_nodes[n][k], 
+                    p.u_nodes[n][k]; 
+                    coordinate_config = CartesianConfig(), 
+                    thrust_config = ZeroOrderHoldConfig(), 
+                    objective_config = p.objective_config
+                )
 
                 # Derived matrices from the STMs
                 As = stms[:, 1:7, 1:(nodes-1)]
@@ -228,12 +440,12 @@ function solve!(
                 )
 
                 delation_dynamic_con[n][k] = @constraint(model,
-                    1.0 - p.trust_region_factor .<= s[n][k] .<= 1.0 + p.trust_region_factor
+                    1.0 - current_trust_region_factor .<= s[n][k] .<= 1.0 + current_trust_region_factor
                 )
 
                 trust_region_dynamic_con[n][k] = @constraint(model,
                     [i=1:(nodes-1)],
-                    -5e1*p.trust_region_factor - 1e-3 .<= x[n][k][1:6, i] .- p.x_nodes[n][k][1:6, i] .<= 5e1*p.trust_region_factor + 1e-3
+                    -5e1*current_trust_region_factor - 1e-3 .<= x[n][k][1:6, i] .- p.x_nodes[n][k][1:6, i] .<= 5e1*current_trust_region_factor + 1e-3
                 )
 
                 start_position_function(time) = begin
@@ -313,28 +525,31 @@ function solve!(
                 delete(model, con)
             end
 
-            time_start_movement_con[n] = [@constraint(model, -2e-1*p.trust_region_factor <= Δt_start[n] <= 2e-1*p.trust_region_factor)]
+            time_start_movement_con[n] = [@constraint(model, -2e-1*current_trust_region_factor <= Δt_start[n] <= 2e-1*current_trust_region_factor)]
             
             for con in actual_time_con[n]
                 delete(model, con)
             end
 
             actual_time_con[n] = [
-                @constraint(model, actual_time[n][end] <= maximum_time - 10*p.trust_region_factor*day_scale),
-                @constraint(model, actual_time[n][1] >= 0.0 + 10*p.trust_region_factor*day_scale)
+                # @constraint(model, actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
+                # @constraint(model, actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale)
+                @constraint(model, actual_time[n][1] .== p.times_journey[n][1])
+                @constraint(model, actual_time[n][2] .== p.times_journey[n][2])
+
             ]
 
             dropoff = p.Δm0[n] .≈ -40/m_scale
             pickup = p.Δm0[n] .> 0.0
 
             if !adaptive_time
-                # objective += x[n][end][7, end]
-                objective -= x[n][1][7, 1]
+                objective += x[n][end][7, end]
+                # objective -= x[n][1][7, 1]
             else
                 objective += sum(actual_time[n][pickup]) - sum(actual_time[n][dropoff])
             end
 
-            objective -= 5e3*m_violation[n]
+            # objective -= 5e3*m_violation[n]
             objective -= 1e4*sum(sum.(x_violation[n]))
             # objective -= 1e-2*sum([sum(u[n][i][4, :].*Δt_nodes[n][i]) for i in 1:length(u[n])])
         end
@@ -379,7 +594,7 @@ function solve!(
                 )[:]
                 p.xf[n][k][7] = value.(x[n][k][7, end])
 
-                p.x_nodes[n][k] = propagate_spacecraft(
+                p.x_nodes[n][k] = integrate_trajectory(
                     p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
                     p.t_nodes[n][k];
                     t_nodes = p.t_nodes[n][k],
@@ -420,7 +635,7 @@ function solve!(
                 @printf "\n     "
             end
             
-            temp = @sprintf "%10.6e  %10.5f  %10.5f  %10.5f  %7.6f  %s" current_maximum_error start_mass*m_scale end_mass*m_scale -m_scale*p.Δm0[n][end] p.trust_region_factor termination_status(model)
+            temp = @sprintf "%10.6e  %10.5f  %10.5f  %10.5f  %7.6f  %s" current_maximum_error start_mass*m_scale end_mass*m_scale -m_scale*p.Δm0[n][end] current_trust_region_factor termination_status(model)
 
             if current_maximum_error < p.dynamical_error
                 printstyled(temp; color=:green)
@@ -430,7 +645,7 @@ function solve!(
         end
 
         if i >= 10
-            p.trust_region_factor = initial_trust_region_factor * ((scp_iterations - i) / (scp_iterations - 10))^2.0 + 5e-5
+            current_trust_region_factor = p.trust_region_factor * ((scp_iterations - i) / (scp_iterations - 10))^2.0 + 5e-5
         end 
     end
 end

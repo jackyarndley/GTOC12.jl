@@ -13,7 +13,7 @@ using CairoMakie
 include("assorted.jl")
 include("configuration.jl")
 include("data_handling.jl")
-include("propagation.jl")
+include("integration.jl")
 include("lambert.jl")
 include("scp.jl")
 include("transforms.jl")
