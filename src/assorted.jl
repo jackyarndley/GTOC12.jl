@@ -35,6 +35,17 @@ function control_guess_from_lambert_impulsive(Δv_departure, Δv_arrival, Δv_de
     return u_nodes ./ thrust
 end
 
+function convert_to_actual_state_string(x)
+    x = copy(x)
+
+    x[1:3, :] .*= r_scale
+    x[4:6, :] .*= v_scale
+    x[7, :] .= x[7, :] * m_scale
+
+    return "$(x[1]) $(x[2]) $(x[3]) $(x[4]) $(x[5]) $(x[6]) $(x[7])"
+end
+
+
 function calculate_Δv_injection_from_lambert(Δv_injection, injection_condition; limit = 6.0/v_scale)
     Δv_injection = copy(Δv_injection)
 
@@ -84,8 +95,8 @@ function ephermeris_cartesian_from_id(id, times)
 end
 
 function find_best_lambert_transfer(
-    x_start_journey,
-    x_end_journey,
+    x0,
+    xf,
     tof
 )
     n_revolutions = 0
@@ -97,13 +108,13 @@ function find_best_lambert_transfer(
         best_dv = current_dv
 
         transfer = multi_revolution_lambert(
-            x_start_journey,
-            x_end_journey,
+            x0,
+            xf,
             tof,
             n_revolutions
         )
 
-        current_dv = norm(transfer[1] - x_start_journey[4:6, :]) + norm(x_end_journey[4:6, :] - transfer[2])
+        current_dv = norm(transfer[1] - x0[4:6, :]) + norm(xf[4:6, :] - transfer[2])
 
         if current_dv > best_dv
             break
@@ -115,7 +126,7 @@ function find_best_lambert_transfer(
         n_revolutions += 1
     end
     
-    return best_transfer[1] - x_start_journey[4:6, :], x_end_journey[4:6, :] - best_transfer[2]
+    return best_transfer[1] - x0[4:6, :], xf[4:6, :] - best_transfer[2]
 end
 
 function get_lambert_trajectory(

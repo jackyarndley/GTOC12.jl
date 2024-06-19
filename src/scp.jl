@@ -1,3 +1,21 @@
+abstract type SequentialConvexAlgorithm end
+
+struct SegmentedTimeFixed <: SequentialConvexAlgorithm end
+struct UnifiedTimeFixed <: SequentialConvexAlgorithm end
+struct MixedTimeAdaptive <: SequentialConvexAlgorithm end
+
+
+abstract type SequentialConvexGuess end
+
+struct BallisticGuess <: SequentialConvexGuess end 
+struct LambertGuess <: SequentialConvexGuess end 
+
+
+abstract type SequentialConvexDiscretization end
+
+struct FixedTimeDiscretization <: SequentialConvexDiscretization end
+struct FixedNumberDiscretization <: SequentialConvexDiscretization end
+
 
 
 mutable struct SequentialConvexProblem{T <: Real}
@@ -13,22 +31,23 @@ mutable struct SequentialConvexProblem{T <: Real}
     Δv0_limit::Vector{Vector{T}}
     Δvf_limit::Vector{Vector{T}}
     Δm0::Vector{Vector{T}}
-    mixing_number::Int64,
-    segment_number::Vector{Int64},
+    mixing_number::Int64
+    segment_number::Vector{Int64}
     objective_config::Union{MassConfig, LoggedMassConfig}
     dynamical_error::T
-    trust_region_factor::T,
+    trust_region_factor::T
     optimizer
 end
 
-abstract type SequentialConvexAlgorithm end
+Base.show(io::IO, p::SequentialConvexProblem) = begin
+    println(io, "A sequential convex problem")
 
-struct SegmentedTimeFixed <: SequentialConvexAlgorithm end
-struct UnifiedTimeFixed <: SequentialConvexAlgorithm end
-struct MixedTimeAdaptive <: SequentialConvexAlgorithm end
+    println(io, "Target sequence: ", p.id_journey)
+    println(io, "Time sequence: ", p.times_journey)
+end
 
 
-function create_gtoc12_scp(
+function SequentialConvexProblem(
     id_journey,
     times_journey;
     objective_config = LoggedMassConfig(),
@@ -49,214 +68,217 @@ function create_gtoc12_scp(
     Δvf_limit = Vector{Float64}[]
     Δm0 = Vector{Float64}[]
 
-    for n in 1:mixing_number
-        segments = segment_number[n]
+    p = SequentialConvexProblem(
+        deepcopy(id_journey),
+        deepcopy(times_journey),
+        t_nodes,
+        u_nodes,
+        x_nodes,
+        x0,
+        xf,
+        Δv0,
+        Δvf,
+        Δv0_limit,
+        Δvf_limit,
+        Δm0,
+        mixing_number,
+        segment_number,
+        objective_config,
+        dynamical_error,
+        trust_region_factor,
+        Mosek.Optimizer
+    )
 
-        locations_journey, _, Δv0_lam, Δvf_lam = get_lambert_trajectory(
-            id_journey[n],
-            times_journey[n],
-        )
-
-        push!(Δm0, get_mass_change_at_ids_mixed(
+    for n in 1:p.mixing_number
+        push!(p.Δm0, get_mass_change_at_ids_mixed(
             id_journey[n],
             times_journey[n],
             id_journey,
             times_journey
         ))
 
-        push!(x0, fill(Float64[], segments))
-        push!(xf, fill(Float64[], segments))
+        push!(p.x0, [ephermeris_cartesian_from_id(
+            id_journey[n][i], 
+            times_journey[n][i]
+        )[:] for i in 1:(p.segment_number[n])])
 
-        push!(t_nodes, fill(Float64[], segments))
-        push!(x_nodes, fill(Matrix{Float64}(undef, 0, 0), segments))
-        push!(u_nodes, fill(Matrix{Float64}(undef, 0, 0), segments))
+        push!(p.xf, [ephermeris_cartesian_from_id(
+            id_journey[n][i], 
+            times_journey[n][i]
+        )[:] for i in 2:(p.segment_number[n] + 1)])
 
-        push!(Δv0, fill(Float64[], segments))
-        push!(Δvf, fill(Float64[], segments))
+        push!(p.t_nodes, fill(Float64[], p.segment_number[n]))
+        push!(p.x_nodes, fill(Matrix{Float64}(undef, 0, 0), p.segment_number[n]))
+        push!(p.u_nodes, fill(Matrix{Float64}(undef, 0, 0), p.segment_number[n]))
 
-        push!(Δv0_limit, fill(0.0, segments))
-        push!(Δvf_limit, fill(0.0, segments))
-        
-        for i in 1:segments
-            # When a transfer is very long the Lambert is not a good guess so just use a zero one
-            if ((Δm0[n][i] < 0.0) && (Δm0[n][i+1] > 0.0))
-                Δv0_lam[:, i] *= 0.0
-                Δvf_lam[:, i] *= 0.0
-            end
+        push!(p.Δv0, fill(Float64[], p.segment_number[n]))
+        push!(p.Δvf, fill(Float64[], p.segment_number[n]))
 
-            # Only allow departure or arrival Δv at the beginning and end
-            Δv0[n][i], Δv0_limit[n][i] = calculate_Δv_injection_from_lambert(Δv0_lam[:, i], id_journey[n][i] == 0)
-            Δvf[n][i], Δvf_limit[n][i] = calculate_Δv_injection_from_lambert(Δvf_lam[:, i], (i == segments) && id_journey[n][i+1] == -3)
-
-            # # Gravity assist departure
-            # if id_journey[n][i] < 0
-            #     Δv0[n][i], Δv0_limit[n][i] = calculate_Δv_injection_from_lambert(Δv0_lam[:, i], true; limit = 50.0 / v_scale)
-            # end
-        
-            # # Gravity assist arrival
-            # if id_journey[n][i + 1] < 0 && (i != segments)
-            #     Δvf[n][i], Δvf_limit[n][i] = calculate_Δv_injection_from_lambert(Δvf_lam[:, i], true; limit = 50.0 / v_scale)
-            # end
-        end
-
-        m0 = 3000.0 / m_scale
-
-        for i in 1:segments
-            Δt_segment = times_journey[n][i+1] - times_journey[n][i]
-
-            t_nodes_segment = collect(0.0:node_time_spacing:(Δt_segment - Δt_segment % node_time_spacing))
-
-            if !(t_nodes_segment[end] ≈ Δt_segment)
-                t_nodes_segment = vcat(t_nodes_segment, Δt_segment)
-            end
-        
-            if id_journey[n][i] == id_journey[n][i + 1]
-                t_nodes_segment = [0.0, Δt_segment/2, Δt_segment]
-            end
-            
-            nodes = length(t_nodes_segment)
-
-            # Get mass estimate with lambert burn
-            mf = m0/exp((norm(Δv0_lam[:, i] .- Δv0[n][i]) + norm(Δvf_lam[:, i] .- Δvf[n][i])) / g0_isp)
-
-            if typeof(objective_config) == LoggedMassConfig
-                x0[n][i] = vcat(locations_journey[:, i], log(m0))
-                xf[n][i] = vcat(locations_journey[:, i+1], log(mf))
-            else
-                x0[n][i] = vcat(locations_journey[:, i], m0)
-                xf[n][i] = vcat(locations_journey[:, i+1], mf)
-            end
-        
-            t_nodes[n][i] = t_nodes_segment
-
-            u_nodes[n][i] = control_guess_from_lambert_impulsive(
-                Δv0_lam[:, i], 
-                Δvf_lam[:, i],
-                Δv0[n][i],
-                Δvf[n][i],
-                t_nodes_segment[2:end] .- t_nodes_segment[1:(end-1)],
-                nodes - 1
-            )
-
-            temp = deepcopy(x0[n][i])
-            temp[4:6] .+= Δv0[n][i]
-
-            x_nodes[n][i] = integrate_trajectory(
-                temp,
-                t_nodes[n][i];
-                t_nodes = t_nodes[n][i],
-                u_nodes = u_nodes[n][i],
-                objective_config,
-            )
-        
-            # Apply the mass change
-            m0 = mf + Δm0[n][i + 1]
-        end
+        push!(p.Δv0_limit, fill(0.0, p.segment_number[n]))
+        push!(p.Δvf_limit, fill(0.0, p.segment_number[n]))
     end
+
+    initialize_scp_discretization!(p, FixedTimeDiscretization())
+
+    # initialize_scp_guess!(p, BallisticGuess())
+    initialize_scp_guess!(p, LambertGuess())
+
+    return p
+end
+
+function initialize_scp_discretization!(
+    p::SequentialConvexProblem,
+    ::FixedTimeDiscretization
+)
+    for n in 1:p.mixing_number, i in 1:p.segment_number[n]
+        Δt_segment = p.times_journey[n][i+1] - p.times_journey[n][i]
+
+        t_nodes_segment = collect(0.0:node_time_spacing:(Δt_segment - Δt_segment % node_time_spacing))
+
+        if !(t_nodes_segment[end] ≈ Δt_segment)
+            t_nodes_segment = vcat(t_nodes_segment, Δt_segment)
+        end
     
-    return t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0
+        if id_journey[n][i] == id_journey[n][i + 1]
+            t_nodes_segment = [0.0, Δt_segment/2, Δt_segment]
+        end
 
+        p.t_nodes[n][i] = t_nodes_segment
+    end
 
-
-
-
-
-
-
-    return SequentialConvexProblem(
-        deepcopy(id_journey),
-        deepcopy(times_journey),
-        t_nodes,
-        u_nodes,
-        x_nodes,
-        x0,
-        xf,
-        Δv0,
-        Δvf,
-        Δv0_limit,
-        Δvf_limit,
-        Δm0,
-        objective_config,
-        dynamical_error,
-        trust_region_factor,
-        Mosek.Optimizer
-    )
+    return
 end
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-function SequentialConvexProblem(
-    id_journey,
-    times_journey;
-    objective_config = LoggedMassConfig(),
-    dynamical_error = 1e-6,
-    trust_region_factor = 0.1,
+function initialize_scp_guess!(
+    p::SequentialConvexProblem,
+    ::BallisticGuess
 )
-    t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0 = get_lambert_guess_for_scp(id_journey, times_journey; objective_config)
-    # t_nodes, u_nodes, x_nodes, x0, xf, Δv0, Δvf, Δv0_limit, Δvf_limit, Δm0 = get_ballistic_guess_for_scp(id_journey, times_journey; objective_config)
+    for n in 1:p.mixing_number
+        m0 = 3000.0 / m_scale
 
-    return SequentialConvexProblem(
-        deepcopy(id_journey),
-        deepcopy(times_journey),
-        t_nodes,
-        u_nodes,
-        x_nodes,
-        x0,
-        xf,
-        Δv0,
-        Δvf,
-        Δv0_limit,
-        Δvf_limit,
-        Δm0,
-        objective_config,
-        dynamical_error,
-        trust_region_factor,
-        Mosek.Optimizer
-    )
+        for k in 1:p.segment_number[n]
+            p.Δv0[n][k] = [0.0, 0.0, 0.0]
+            p.Δv0_limit[n][k] = 0.0
+
+            p.Δvf[n][k] = [0.0, 0.0, 0.0]
+            p.Δvf_limit[n][k] = 0.0
+
+            mf = m0
+
+            if typeof(p.objective_config) == LoggedMassConfig
+                p.x0[n][k] = vcat(p.x0[n][k], log(m0))
+                p.xf[n][k] = vcat(p.xf[n][k], log(mf))
+            else
+                p.x0[n][k] = vcat(p.x0[n][k], m0)
+                p.xf[n][k] = vcat(p.xf[n][k], mf)
+            end
+
+            p.u_nodes[n][k] = zeros(4, length(p.t_nodes[n][k]) - 1)
+
+            temp = deepcopy(p.x0[n][k])
+            temp[4:6] .+= p.Δv0[n][k]
+
+            p.x_nodes[n][k] = integrate_trajectory(
+                temp,
+                p.t_nodes[n][k];
+                t_nodes = p.t_nodes[n][k],
+                u_nodes = p.u_nodes[n][k],
+                objective_config = p.objective_config,
+            )
+
+            m0 = mf + Δm0[n][k + 1]
+        end
+    end
+end
+
+function initialize_scp_guess!(
+    p::SequentialConvexProblem,
+    ::LambertGuess
+)
+    for n in 1:p.mixing_number
+        m0 = 3000.0 / m_scale
+
+        for k in 1:p.segment_number[n]
+            Δv0, Δvf = if p.id_journey[n][k] == id_journey[n][k + 1]
+                zeros(Float64, 3), zeros(Float64, 3)
+            else
+                temp = deepcopy(p.xf[n][k])
+
+                tof = p.times_journey[n][k + 1] - p.times_journey[n][k]
+
+                # Prevent near 180 degree transfers
+                while norm(cross(p.x0[n][k][1:3], temp[1:3])) < 0.5
+                    tof += 1*day_scale
+                    temp = ephermeris_cartesian_from_id(
+                        p.id_journey[n][k + 1], 
+                        p.times_journey[n][k] + tof
+                    )
+                end
+
+                find_best_lambert_transfer(p.x0[n][k], temp, tof)
+            end
+
+            p.Δv0[n][k] = Δv0[:]
+            p.Δv0_limit[n][k] = (p.id_journey[n][k] == 0) ? 6.0/v_scale : 0.0
+
+            p.Δvf[n][k] = Δvf[:]
+            p.Δvf_limit[n][k] = ((k == p.segment_number[n]) && id_journey[n][k+1] == -3) ? 6.0/v_scale : 0.0
+
+            Δv_use = max(norm(p.Δv0[n][k]) - p.Δv0_limit[n][k], 0.0) + max(norm(p.Δvf[n][k]) - p.Δvf_limit[n][k], 0.0) 
+
+            mf = m0/(exp(Δv_use) / g0_isp)
+
+            if typeof(p.objective_config) == LoggedMassConfig
+                p.x0[n][k] = vcat(p.x0[n][k], log(m0))
+                p.xf[n][k] = vcat(p.xf[n][k], log(mf))
+            else
+                p.x0[n][k] = vcat(p.x0[n][k], m0)
+                p.xf[n][k] = vcat(p.xf[n][k], mf)
+            end
+
+            temp = deepcopy(p.x0[n][k])
+            temp[4:6] .+= Δv0
+
+            p.u_nodes[n][k] = zeros(4, length(p.t_nodes[n][k]) - 1)
+
+            # Use Lambert transfer as guess for x_nodes
+            p.x_nodes[n][k] = integrate_trajectory(
+                temp,
+                p.t_nodes[n][k];
+                objective_config = p.objective_config,
+            )
+
+            m0 = mf + p.Δm0[n][k + 1]
+        end
+    end
 end
 
 
 function convert_logged_mass_to_mass!(
     p::SequentialConvexProblem
 )
-    mixing = length(p.id_journey)
-
     p.objective_config = MassConfig()
 
-    for n in 1:mixing
-        segments = length(id_journey[n]) - 1
+    for n in 1:p.mixing_number, k in 1:p.segment_number[n]
+        mass = exp.(p.x_nodes[n][k][7, :])
 
-        for k in 1:segments
-            mass = exp.(p.x_nodes[n][k][7, :])
+        p.x0[n][k][7] = exp(p.x0[n][k][7])
+        p.xf[n][k][7] = exp(p.xf[n][k][7])
 
-            p.x0[n][k][7] = exp(p.x0[n][k][7])
-            p.xf[n][k][7] = exp(p.xf[n][k][7])
+        p.u_nodes[n][k][1, :] .*= mass[1:end-1]
+        p.u_nodes[n][k][2, :] .*= mass[1:end-1]
+        p.u_nodes[n][k][3, :] .*= mass[1:end-1]
+        p.u_nodes[n][k][4, :] .*= mass[1:end-1]
 
-            p.u_nodes[n][k][1, :] .*= mass[1:end-1]
-            p.u_nodes[n][k][2, :] .*= mass[1:end-1]
-            p.u_nodes[n][k][3, :] .*= mass[1:end-1]
-            p.u_nodes[n][k][4, :] .*= mass[1:end-1]
-
-            p.x_nodes[n][k] = integrate_trajectory(
-                p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
-                p.t_nodes[n][k];
-                t_nodes = p.t_nodes[n][k],
-                u_nodes = p.u_nodes[n][k],
-                p.objective_config,
-            )
-        end
+        p.x_nodes[n][k] = integrate_trajectory(
+            p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+            p.t_nodes[n][k];
+            t_nodes = p.t_nodes[n][k],
+            u_nodes = p.u_nodes[n][k],
+            p.objective_config,
+        )
     end
 
     return
@@ -331,9 +353,9 @@ function solve!(
             @constraint(model, x_violation[n][k] .>= Δxf[n][k])
             @constraint(model, x_violation[n][k] .>= -Δxf[n][k])
 
-            # if !adaptive_time
-            #     @constraint(model, s[n][k] .== 1.0)
-            # end
+            if !adaptive_time
+                @constraint(model, s[n][k] .== 1.0)
+            end
         end
 
         if !adaptive_time
@@ -342,9 +364,9 @@ function solve!(
 
         # Limit maximum mass at start
         if typeof(p.objective_config) == LoggedMassConfig
-            @constraint(model, x[n][1][7, 1] == log(1000/m_scale))
+            @constraint(model, x[n][1][7, 1] <= log(3000/m_scale))
         else
-            @constraint(model, x[n][1][7, 1] == 1000.0/m_scale)
+            @constraint(model, x[n][1][7, 1] <= 3000.0/m_scale)
         end
     end
 
@@ -534,24 +556,23 @@ function solve!(
             actual_time_con[n] = [
                 # @constraint(model, actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
                 # @constraint(model, actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale)
-                @constraint(model, actual_time[n][1] .== p.times_journey[n][1])
-                @constraint(model, actual_time[n][2] .== p.times_journey[n][2])
-
+                # @constraint(model, actual_time[n][1] .== p.times_journey[n][1])
+                # @constraint(model, actual_time[n][2] .== p.times_journey[n][2])
             ]
 
             dropoff = p.Δm0[n] .≈ -40/m_scale
             pickup = p.Δm0[n] .> 0.0
 
             if !adaptive_time
-                objective += x[n][end][7, end]
-                # objective -= x[n][1][7, 1]
+                # objective += x[n][end][7, end]
+                objective -= x[n][1][7, 1]
             else
                 objective += sum(actual_time[n][pickup]) - sum(actual_time[n][dropoff])
             end
 
-            # objective -= 5e3*m_violation[n]
+            objective -= 5e3*m_violation[n]
             objective -= 1e4*sum(sum.(x_violation[n]))
-            # objective -= 1e-2*sum([sum(u[n][i][4, :].*Δt_nodes[n][i]) for i in 1:length(u[n])])
+            objective -= 1e-1*sum([sum(u[n][i][4, :].*Δt_nodes[n][i]) for i in 1:length(u[n])])
         end
 
         @objective(model, 
@@ -570,6 +591,8 @@ function solve!(
             p.t_nodes[n] = [vcat(0.0, cumsum(JuMP.value.(s[n][k]) .* Δt_nodes[n][k])) for k in 1:length(p.x0[n])]
         end
 
+        maximum_error_mixing = 0.0
+
         for n in 1:mixing
             dynamical_errors = []
             mass_link_errors = []
@@ -586,13 +609,20 @@ function solve!(
                     p.id_journey[n][k], 
                     p.times_journey[n][k]
                 )[:]
-                p.x0[n][k][7] = value.(x[n][k][7, 1])
 
+                if k != 1
+                    p.x0[n][k][7] = p.xf[n][k - 1][7] + p.Δm0[n][k]
+                else
+                    p.x0[n][k][7] = value.(x[n][k][7, 1])
+                end
+                
                 p.xf[n][k][1:6] = ephermeris_cartesian_from_id(
                     p.id_journey[n][k+1], 
                     p.times_journey[n][k+1]
                 )[:]
-                p.xf[n][k][7] = value.(x[n][k][7, end])
+                # p.xf[n][k][7] = value.(x[n][k][7, end])
+
+                # p.u_nodes[n][k][4, :] = norm.(eachcol(p.u_nodes[n][k][1:3, :]))
 
                 p.x_nodes[n][k] = integrate_trajectory(
                     p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
@@ -602,17 +632,31 @@ function solve!(
                     p.objective_config,
                 )
 
+                # p.x0[n][k][7] = p.x_nodes[n][k][7, 1]
+                p.xf[n][k][7] = p.x_nodes[n][k][7, end]
+
+                # if k != length(p.x0[n])
+                #     p.x0[n][k + 1][7] = 
+                # end
+
+
                 push!(
                     dynamical_errors, 
                     maximum(abs.(p.xf[n][k] .- p.x_nodes[n][k][:, end] .- vcat([0.0, 0.0, 0.0], p.Δvf[n][k], [0.0])))
                 )
 
-                if k > 1
-                    push!(
-                        mass_link_errors,
-                        abs(exp(p.x_nodes[n][k-1][7, end]) + p.Δm0[n][k] - exp(p.x_nodes[n][k][7, 1]))
-                    )
-                end
+                # if k > 1
+                #     mass_link_error = if typeof(p.objective_config) == LoggedMassConfig
+                #         abs(exp(p.x_nodes[n][k-1][7, end]) + p.Δm0[n][k] - exp(p.x_nodes[n][k][7, 1]))
+                #     else
+                #         abs(p.x_nodes[n][k-1][7, end] + p.Δm0[n][k] - p.x_nodes[n][k][7, 1])
+                #     end
+
+                #     push!(
+                #         mass_link_errors,
+                #         mass_link_error
+                #     )
+                # end
             end
 
             current_maximum_error = maximum(vcat(dynamical_errors, mass_link_errors))
@@ -642,6 +686,12 @@ function solve!(
             else
                 printstyled(temp; color=:red)
             end
+
+            maximum_error_mixing = max(maximum_error_mixing, current_maximum_error)
+        end
+
+        if maximum_error_mixing <= 2e-7
+            break
         end
 
         if i >= 10

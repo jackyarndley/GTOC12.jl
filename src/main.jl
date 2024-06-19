@@ -327,115 +327,6 @@ end
 
 
 
-
-
-
-
-
-
-id_journey = [
-    [0, 56608, 56608, -3]
-]
-
-times_journey = [
-    [1.0321259370000504, 10.827001079130554, 85.01277301090416, 92.92573852790454]
-]
-
-
-mass_changes = get_mass_change_at_ids_mixed(
-    id_journey_mixed[1],
-    times_journey_mixed[1],
-    id_journey_mixed,
-    times_journey_mixed
-)
-
-
-locations_journey, Δv_journey_combined, Δv_journey_departure, Δv_journey_arrival = get_lambert_trajectory(
-    id_journey_mixed[1],
-    times_journey_mixed[1],
-)
-
-
-# Plot the test trajectory
-# plot_ship_trajectory_lambert(
-#     times_journey, 
-#     id_journey, 
-#     Δv_journey_combined,
-#     planets_classical
-# )
-
-
-node_time_spacing = 5.0 * day_scale
-
-mass_starting = 3000.0 / m_scale
-reverse_mass = false
-segments = length(id_journey) - 1
-
-x_departure_cartesian, x_arrival_cartesian, t_nodes, u_nodes, Δv_departure_injection, Δv_departure_injection_limit, Δv_arrival_injection, Δv_arrival_injection_limit = get_lambert_guess_for_scp(
-    Δv_journey_departure,
-    Δv_journey_arrival,
-    locations_journey,
-    id_journey,
-    times_journey,
-    mass_starting,
-    mass_changes;
-    reverse_mass
-);
-
-
-
-
-
-
-
-x_nodes, u_nodes, Δv_departure_injection, Δv_arrival_injection, termination, maximum_error = solve_scp_full_mixed_adaptive_time(
-    x_departure_cartesian_mixed,
-    x_arrival_cartesian_mixed,
-    t_nodes_mixed,
-    u_nodes_mixed,
-    Δv_departure_injection_mixed,
-    Δv_departure_injection_limit_mixed,
-    Δv_arrival_injection_mixed,
-    Δv_arrival_injection_limit_mixed,
-    mass_changes_mixed,
-    id_journey_mixed,
-    LoggedMassConfig();
-    linearization_error = 1e-4,
-    display_output = true,
-    reverse_mass,
-    initial_scaling_factor = 0.025,
-    # optimizer = Gurobi.Optimizer,
-    optimizer = Mosek.Optimizer,
-    time_change = true
-);
-
-# Refine as guess for normal mass problem
-u_nodes, x_departure_cartesian = convert_log_mass_control_to_mass_control(locations_journey, mass_starting, t_nodes, u_nodes, Δv_departure_injection, mass_changes, x_departure_cartesian);
-
-x_nodes, u_nodes, Δv_departure_injection, Δv_arrival_injection, termination, maximum_error = solve_scp_full(
-    x_departure_cartesian,
-    x_arrival_cartesian,
-    t_nodes,
-    u_nodes,
-    Δv_departure_injection,
-    Δv_departure_injection_limit,
-    Δv_arrival_injection,
-    Δv_arrival_injection_limit,
-    mass_changes,
-    id_journey,
-    MassConfig();
-    display_output = true,
-    linearization_error = 1e-7,
-    reverse_mass,
-);
-
-
-mass_starting = min(1.0, x_nodes[1][7, 1])
-
-ga_times, ga_amount = get_gravity_assist_information(times_journey, id_journey, Δv_departure_injection, Δv_arrival_injection)
-
-
-
 # Self cleaning
 # id_journey_mixed = [
 #     [0 35457 22813 45607 25996 21927 45750 19821 19821 22813 35457 25996 45750 45607 21927 -3][:],
@@ -462,6 +353,15 @@ ga_times, ga_amount = get_gravity_assist_information(times_journey, id_journey, 
 #     convert_mjd_to_time([64448.0 65023.0 65128.0 65253.0 65463.0 65643.0 65848.0 66093.0 67478.0 67813.0 68358.0 68713.0 68963.0 69153.0 69328.0 69803.0][:]),
 # ]
 
+
+
+id_journey = [
+    [0, 56608]
+]
+
+times_journey = [
+    [1.0321259370000504, 10.827001079130554]
+]
 
 
 
@@ -499,9 +399,9 @@ times_journey = [
 ]
 
 
-scp_iterations = 40
+scp_iterations = 80
 
-node_time_spacing = 5.0*day_scale
+node_time_spacing = 20.0*day_scale
 
 
 
@@ -513,6 +413,14 @@ p = SequentialConvexProblem(
     objective_config = LoggedMassConfig(),
     trust_region_factor = 0.1
 );
+
+solve!(p,
+    MixedTimeAdaptive(); 
+    adaptive_time = false
+)
+
+
+convert_logged_mass_to_mass!(p)
 
 solve!(p,
     MixedTimeAdaptive(); 
@@ -533,6 +441,18 @@ plot_trajectory(p)
 
 
 
+write_solution(p, "output/Result.txt")
+
+
+
+
+temp = ephermeris_cartesian_from_id(0, convert_mjd_to_time(69730))
+temp = ephermeris_cartesian_from_id(0, p.times_journey[1][4])
+temp = vcat(temp, [0.0])
+
+convert_to_actual_state_string(temp)
+
+
 
 
 for i in 1:length(p.u_nodes[1])
@@ -543,57 +463,11 @@ end
 
 
 
-t_nodes_total, u_nodes_total = process_output_for_plotting(p.times_journey[1], p.t_nodes[1], p.u_nodes[1])
-
-
-
-
-x_initial_departure_cartesian = p.x0[1][1]
-x_initial_departure_cartesian[4:6] .+= p.Δv0[1][1]
-
-
-
-plot_thrust_information(
-    p.id_journey[1],
-    p.times_journey[1],
-    p.Δm0[1],
-    t_nodes_total, 
-    u_nodes_total, 
-    x_initial_departure_cartesian,
-    LoggedMassConfig()
-)
 
 
 
 
 
-
-plot_ship_trajectory_low_thrust(
-    t_nodes_total, 
-    u_nodes_total, 
-    x_initial_departure_cartesian, 
-    times_journey, 
-    id_journey, 
-    mass_changes,
-    planets_classical,
-    MassConfig();
-    ga_times, 
-    ga_amount,
-    zoom = 1.0,
-)
-
-
-for i in 1:length(u_nodes)
-    display(maximum(norm.(norm.(eachcol(u_nodes[i][1:3, :])) .- u_nodes[i][4, :])))
-end
-
-
-print("\n\nMass mined: $(-m_scale*mass_changes[end])kg")
-print("\n\nFinal mass remaining: $(m_scale*(x_nodes[end][7, end] + mass_changes[end]) - 500)kg")
-
-mass_starting = x_nodes[1][7, 1]
-
-# mass_starting = 1.0
 
 write_solution(
     # "results/testing/Result.txt",
