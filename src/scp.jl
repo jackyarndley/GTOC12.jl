@@ -71,7 +71,7 @@ Base.show(io::IO, p::SequentialConvexProblem) = begin
         println(io)
     end
 
-    println(io, "Total ($total_deployments deployments, $total_collections, collections)")
+    println(io, "Total ($total_deployments deployments, $total_collections collections)")
     println(io, @sprintf("Mass Returned: %.2fkg", -m_scale*sum([val[end] for val in p.Δm0])))
 
     println(io, 

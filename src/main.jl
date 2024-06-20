@@ -413,7 +413,7 @@ p = SequentialConvexProblem(
     times_journey;
     objective_config = LoggedMassConfig(),
     trust_region_factor = 0.1,
-    mass_overhead = 0.01/m_scale
+    mass_overhead = 1.0/m_scale
 );
 
 solve!(p,

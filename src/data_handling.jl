@@ -79,59 +79,66 @@ function write_solution(
     touch(filename)
 
     open(filename, "w") do f
-        for n in 1:p.mixing_number, k in 1:(p.segment_number[n] + 1)
-            # Write current state
-            if k == 1
-                write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(p.x0[n][k]))\n")
-            else
-                temp = deepcopy(p.xf[n][k - 1])
-                temp[4:6] .-= p.Δvf[n][k - 1]
-                # temp[4:6] = p.x_nodes[n][k - 1][4:6, end]
+        for n in 1:p.mixing_number
+            for k in 1:(p.segment_number[n] + 1)
+
+                # Write current state
+                if k == 1
+                    write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(p.x0[n][k]))\n")
+                else
+                    temp = deepcopy(p.xf[n][k - 1])
+                    temp[4:6] .-= p.Δvf[n][k - 1]
+                    # temp[4:6] = p.x_nodes[n][k - 1][4:6, end]
+
+                    write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(temp))\n")
+                end
+
+                if k == (p.segment_number[n] + 1)
+                    temp = deepcopy(p.xf[n][end])
+                    temp[4:6] .-= p.Δvf[n][end]
+                    temp[7] += p.Δm0[n][k]
+        
+                    write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(temp))")
+
+                    if n != p.mixing_number
+                        write(f, "\n")
+                    end
+
+                    break
+                end
+
+                temp = deepcopy(p.x0[n][k])
+                temp[4:6] += p.Δv0[n][k]
 
                 write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(temp))\n")
-            end
-
-            if k == (p.segment_number[n] + 1) 
-                temp = deepcopy(p.xf[n][end])
-                temp[4:6] .-= p.Δvf[n][end]
-                temp[7] += p.Δm0[n][k]
-    
-                write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(temp))")
-
-                break
-            end
-
-            temp = deepcopy(p.x0[n][k])
-            temp[4:6] += p.Δv0[n][k]
-
-            write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(temp))\n")
 
 
-            for j in 1:(length(p.t_nodes[n][k]) - 1)
-                current_time = convert_time_to_mjd(p.times_journey[n][k] + p.t_nodes[n][k][j])
-                current_thrust = deepcopy(p.u_nodes[n][k][1:3, j]) * thrust * m_scale * a_scale * 1e3
-                next_time = min(
-                    convert_time_to_mjd(p.times_journey[n][k] + p.t_nodes[n][k][j + 1]),
-                    convert_time_to_mjd(p.times_journey[n][k + 1])
-                )
+                for j in 1:(length(p.t_nodes[n][k]) - 1)
+                    current_time = convert_time_to_mjd(p.times_journey[n][k] + p.t_nodes[n][k][j])
+                    current_thrust = deepcopy(p.u_nodes[n][k][1:3, j]) * thrust * m_scale * a_scale * 1e3
+                    next_time = min(
+                        convert_time_to_mjd(p.times_journey[n][k] + p.t_nodes[n][k][j + 1]),
+                        convert_time_to_mjd(p.times_journey[n][k + 1])
+                    )
 
-                # Limit thrust in the case of small overhead
-                if norm(current_thrust) > thrust * m_scale * a_scale * 1e3
-                    current_thrust = normalize(current_thrust) * thrust * m_scale * a_scale * 1e3
+                    # Limit thrust in the case of small overhead
+                    if norm(current_thrust) > thrust * m_scale * a_scale * 1e3
+                        current_thrust = normalize(current_thrust) * thrust * m_scale * a_scale * 1e3
+                    end
+
+                    write(f, "$n -1 $current_time 0.0, 0.0, 0.0\n")
+
+                    for time in current_time:1.0:next_time
+                        current_time = time
+                        write(f, "$n -1 $current_time $(current_thrust[1]) $(current_thrust[2]) $(current_thrust[3])\n")
+                    end
+
+                    if !(current_time ≈ next_time)
+                        write(f, "$n -1 $next_time $(current_thrust[1]) $(current_thrust[2]) $(current_thrust[3])\n")
+                    end
+
+                    write(f, "$n -1 $next_time 0.0, 0.0, 0.0\n")
                 end
-
-                write(f, "$n -1 $current_time 0.0, 0.0, 0.0\n")
-
-                for time in current_time:1.0:next_time
-                    current_time = time
-                    write(f, "$n -1 $current_time $(current_thrust[1]) $(current_thrust[2]) $(current_thrust[3])\n")
-                end
-
-                if !(current_time ≈ next_time)
-                    write(f, "$n -1 $next_time $(current_thrust[1]) $(current_thrust[2]) $(current_thrust[3])\n")
-                end
-
-                write(f, "$n -1 $next_time 0.0, 0.0, 0.0\n")
             end
         end
 
