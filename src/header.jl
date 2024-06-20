@@ -12,13 +12,13 @@ using CairoMakie
 
 include("assorted.jl")
 include("configuration.jl")
-include("data_handling.jl")
 include("integration.jl")
 include("lambert.jl")
 include("scp.jl")
 include("transforms.jl")
 include("plotting.jl")
 include("mip.jl")
+include("data_handling.jl")
 
 # Scaling constants
 μ = 1.32712440018e11 # km^3 / s^2

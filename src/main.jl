@@ -355,14 +355,6 @@ end
 
 
 
-id_journey = [
-    [0, 56608]
-]
-
-times_journey = [
-    [1.0321259370000504, 10.827001079130554]
-]
-
 
 
 
@@ -379,6 +371,7 @@ times_journey = [
 
 
 id_journey = [
+    # [0 35457 22813 22813 35457][:],
     # [0 35457 22813 22813 35457 -3][:],
     [0 35457 22813 45607 25996 21927 45750 19821 19821 22813 35457 25996 45750 45607 21927 -3][:],
     # [0 14875 40259 665 34568 59701 37913 39279 39279 37913 40259 665 34568 59701 14875 -3][:],
@@ -389,9 +382,9 @@ id_journey = [
 ]
 
 times_journey = [
-    # convert_mjd_to_time([64428.0 65013.0 65258.0 69078.0 69313.0 69783.0][:]),
-    convert_mjd_to_time([64448.0 65008.0 65248.0 65468.0 65778.0 65933.0 66118.0 66248.0 67813.0 68053.0 68278.0 68708.0 68893.0 69038.0 69343.0 69783.0][:]),
+    # convert_mjd_to_time([64428.0 65013.0 65258.0 69078.0 69313.0][:]),
     # convert_mjd_to_time([64448.0 65008.0 65248.0 65468.0 65778.0 65933.0 66118.0 66248.0 67813.0 68053.0 68278.0 68708.0 68893.0 69038.0 69343.0 69783.0][:]),
+    convert_mjd_to_time([64448.0 65008.0 65248.0 65468.0 65778.0 65933.0 66118.0 66248.0 67813.0 68053.0 68278.0 68708.0 68893.0 69038.0 69343.0 69783.0][:]),
 
     # convert_mjd_to_time([64428.0 65013.0 65258.0 65458.0 65718.0 65948.0 66118.0 66313.0 68168.0 68408.0 68538.0 68748.0 68888.0 69168.0 69343.0 69803.0][:]),
     # convert_mjd_to_time([64448.0 65008.0 65248.0 65468.0 65778.0 65933.0 66118.0 66248.0 67973.0 68213.0 68558.0 68823.0 69033.0 69148.0 69353.0 69803.0][:]),
@@ -401,7 +394,7 @@ times_journey = [
 
 scp_iterations = 80
 
-node_time_spacing = 20.0*day_scale
+node_time_spacing = 10.0*day_scale
 
 
 
@@ -416,7 +409,7 @@ p = SequentialConvexProblem(
 
 solve!(p,
     MixedTimeAdaptive(); 
-    adaptive_time = false
+    adaptive_time = true
 )
 
 
@@ -444,67 +437,7 @@ plot_trajectory(p)
 write_solution(p, "output/Result.txt")
 
 
-
-
-temp = ephermeris_cartesian_from_id(0, convert_mjd_to_time(69730))
-temp = ephermeris_cartesian_from_id(0, p.times_journey[1][4])
-temp = vcat(temp, [0.0])
-
-convert_to_actual_state_string(temp)
-
-
-
-
 for i in 1:length(p.u_nodes[1])
     display(maximum(norm.(norm.(eachcol(p.u_nodes[1][i][1:3, :])) .- p.u_nodes[1][i][4, :])))
 end
-
-
-
-
-
-
-
-
-
-
-
-write_solution(
-    # "results/testing/Result.txt",
-    result_files_all[chosen_ships_all[36]][10],
-    mass_starting,
-    mass_changes,
-    locations_journey,
-    times_journey,
-    id_journey,
-    Δv_departure_injection,
-    Δv_arrival_injection,
-    t_nodes,
-    u_nodes
-)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

@@ -296,7 +296,13 @@ function solve!(
 
     model = Model(p.optimizer)
     set_silent(model)
-    set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-4)
+    set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-10)
+
+    # if adaptive_time
+    #     set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-4)
+    # else
+    #     set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-10)
+    # end
 
     # State variables
     x = [[] for _ in 1:mixing]
@@ -572,7 +578,7 @@ function solve!(
 
             objective -= 5e3*m_violation[n]
             objective -= 1e4*sum(sum.(x_violation[n]))
-            objective -= 1e-1*sum([sum(u[n][i][4, :].*Δt_nodes[n][i]) for i in 1:length(u[n])])
+            # objective -= 1e-1*sum([sum(u[n][i][4, :].*Δt_nodes[n][i]) for i in 1:length(u[n])])
         end
 
         @objective(model, 
@@ -581,6 +587,8 @@ function solve!(
         )
         
         JuMP.optimize!(model)
+
+        # display(JuMP.value.(x_violation[1][4]))
 
         for n in 1:mixing
             p.times_journey[n] = JuMP.value.(actual_time[n])
@@ -610,16 +618,20 @@ function solve!(
                     p.times_journey[n][k]
                 )[:]
 
-                if k != 1
-                    p.x0[n][k][7] = p.xf[n][k - 1][7] + p.Δm0[n][k]
-                else
-                    p.x0[n][k][7] = value.(x[n][k][7, 1])
-                end
-                
                 p.xf[n][k][1:6] = ephermeris_cartesian_from_id(
                     p.id_journey[n][k+1], 
                     p.times_journey[n][k+1]
                 )[:]
+
+                # if k != 1
+                #     p.x0[n][k][7] = p.xf[n][k - 1][7] + p.Δm0[n][k] 
+                # else
+                #     p.x0[n][k][7] = value.(x[n][k][7, 1])
+                # end
+
+                p.x0[n][k][7] = value.(x[n][k][7, 1])
+                p.xf[n][k][7] = value.(x[n][k][7, end])
+
                 # p.xf[n][k][7] = value.(x[n][k][7, end])
 
                 # p.u_nodes[n][k][4, :] = norm.(eachcol(p.u_nodes[n][k][1:3, :]))
@@ -633,7 +645,7 @@ function solve!(
                 )
 
                 # p.x0[n][k][7] = p.x_nodes[n][k][7, 1]
-                p.xf[n][k][7] = p.x_nodes[n][k][7, end]
+                # p.xf[n][k][7] = p.x_nodes[n][k][7, end]
 
                 # if k != length(p.x0[n])
                 #     p.x0[n][k + 1][7] = 
@@ -642,21 +654,21 @@ function solve!(
 
                 push!(
                     dynamical_errors, 
-                    maximum(abs.(p.xf[n][k] .- p.x_nodes[n][k][:, end] .- vcat([0.0, 0.0, 0.0], p.Δvf[n][k], [0.0])))
+                    maximum(abs.(p.xf[n][k][1:6] .- p.x_nodes[n][k][1:6, end] .- vcat([0.0, 0.0, 0.0], p.Δvf[n][k])))
                 )
 
-                # if k > 1
-                #     mass_link_error = if typeof(p.objective_config) == LoggedMassConfig
-                #         abs(exp(p.x_nodes[n][k-1][7, end]) + p.Δm0[n][k] - exp(p.x_nodes[n][k][7, 1]))
-                #     else
-                #         abs(p.x_nodes[n][k-1][7, end] + p.Δm0[n][k] - p.x_nodes[n][k][7, 1])
-                #     end
+                if k > 1
+                    mass_link_error = if typeof(p.objective_config) == LoggedMassConfig
+                        abs(exp(JuMP.value.(x[n][k-1][7, end])) + p.Δm0[n][k] - exp(JuMP.value.(x[n][k][7, 1])))
+                    else
+                        abs(JuMP.value.(x[n][k-1][7, end]) + p.Δm0[n][k] - JuMP.value.(x[n][k][7, 1]))
+                    end
 
-                #     push!(
-                #         mass_link_errors,
-                #         mass_link_error
-                #     )
-                # end
+                    # push!(
+                    #     mass_link_errors,
+                    #     mass_link_error
+                    # )
+                end
             end
 
             current_maximum_error = maximum(vcat(dynamical_errors, mass_link_errors))

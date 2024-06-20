@@ -22,140 +22,6 @@ function remove_gravity_assists_from_journeys(id_journey_all)
     return id_journey_all_removed
 end
 
-
-# Format for the files
-# write the mass before and after 
-# shipid asteroidid time state mass_before_dropoff
-# shipid asteroidid time state mass_after_dropoff
-
-# shipid -1 time_first_node 0.0 0.0 0.0 
-# shipid -1 time_first_node thrust1
-
-# shipid -1 time_second_node thrust1
-# shipid -1 time_second_node thrust2
-
-# ...
-# shipid -1 time_last_node thrustlast-1
-# shipid -1 time_last_node thrustlast
-# shipid -1 time_end 0.0 0.0 0.0
-
-# shipid asteroidid time state mass_before_dropoff
-# shipid asteroidid time state mass_after_dropoff
-
-function write_solution(
-    filename,
-    mass_starting,
-    mass_changes,
-    locations_journey,
-    times_journey,
-    id_journey,
-    Δv_departure_injection,
-    Δv_arrival_injection,
-    t_nodes,
-    u_nodes
-)
-    # Create file if does not exist
-    touch(filename)
-
-    open(filename, "w") do f
-        ship_mass = copy(mass_starting)
-
-        x_current = locations_journey[:, 1]
-        x_current = vcat(x_current, [ship_mass])
-
-        times_mjd_journey = convert_time_to_mjd(times_journey)
-
-        maximum_position_error = 0.0
-
-        for ship_id in 1:1
-            for i in 1:size(id_journey, 1)
-                target_id = id_journey[i]
-                
-                if !(mass_changes[i] ≈ 0 && target_id > 0)
-                    # Apply the arrival injection state
-                    if i > 1
-                        x_current[4:6] -= Δv_arrival_injection[i - 1]
-                    end
-
-                    # Write arrival state
-                    write(f, "$ship_id $target_id $(times_mjd_journey[i]) $(convert_to_actual_state_string(x_current))\n")
-
-                    # Apply departure injection state
-                    if i < size(id_journey, 1)
-                        x_current[4:6] .= locations_journey[4:6, i] + Δv_departure_injection[i]
-                    end
-
-                    # Apply mass dropoff/pickup
-                    x_current[7] += mass_changes[i]
-
-                    # If we are at the last state terminate
-                    if i == size(id_journey, 1)
-                        write(f, "$ship_id $target_id $(times_mjd_journey[i]) $(convert_to_actual_state_string(x_current))")
-                        break
-                    end
-
-                    # Write departure state
-                    write(f, "$ship_id $target_id $(times_mjd_journey[i]) $(convert_to_actual_state_string(x_current))\n")
-                end
-
-                # Normalise thrust to the correct value
-                u_nodes[i][4, :] = norm.(eachcol(u_nodes[i][1:3, :]))
-
-                # Propagate to get the final mass
-                x_nodes = integrate_trajectory(
-                    x_current, 
-                    t_nodes[i]; 
-                    t_nodes = t_nodes[i], 
-                    u_nodes = u_nodes[i], 
-                    thrust_config = ZeroOrderHoldConfig(),
-                    objective_config = MassConfig()
-                )
-
-                maximum_position_error = max(maximum_position_error, r_scale*norm(x_nodes[1:3, end] - locations_journey[1:3, i + 1]))
-
-                x_current = copy(x_nodes[:, end])
-
-                x_current[1:6] = locations_journey[:, i + 1]
-
-                # Write the thrusting lines
-                thrust_nodes = u_nodes[i][1:3, :] * thrust * m_scale * a_scale * 1e3
-
-                current_time = convert_time_to_mjd(times_journey[i] + t_nodes[i][1])
-
-                for j in 1:(length(t_nodes[i]) - 1)
-                    write(f, "$ship_id -1 $current_time 0.0, 0.0, 0.0\n")
-
-                    current_thrust = thrust_nodes[:, j]
-
-                    if norm(current_thrust) > thrust * m_scale * a_scale * 1e3
-                        current_thrust = normalize(current_thrust) * thrust * m_scale * a_scale * 1e3
-                    end
-
-                    write(f, "$ship_id -1 $current_time $(current_thrust[1]) $(current_thrust[2]) $(current_thrust[3])\n")
-
-                    next_time = convert_time_to_mjd(times_journey[i] + t_nodes[i][j + 1])
-
-                    if j + 1 == length(t_nodes[i])
-                        next_time = convert_time_to_mjd(times_journey[i + 1])
-                    end
-
-                    while !(current_time ≈ next_time)
-                        current_time += min(1.0, next_time - current_time)
-                        write(f, "$ship_id -1 $current_time $(current_thrust[1]) $(current_thrust[2]) $(current_thrust[3])\n")
-                    end
-
-                    # current_time = next_time
-
-                    write(f, "$ship_id -1 $current_time 0.0, 0.0, 0.0\n")
-                end
-            end
-        end
-
-        print("\nMaximum position error: $(maximum_position_error)km")
-    end
-end
-
-
 function combine_solutions(
     filenames,
     output_filename
@@ -188,10 +54,24 @@ function combine_solutions(
     return
 end
 
+# Format for the files
+# write the mass before and after 
+# shipid asteroidid time state mass_before_dropoff
+# shipid asteroidid time state mass_after_dropoff
 
+# shipid -1 time_first_node 0.0 0.0 0.0 
+# shipid -1 time_first_node thrust1
 
+# shipid -1 time_second_node thrust1
+# shipid -1 time_second_node thrust2
 
+# ...
+# shipid -1 time_last_node thrustlast-1
+# shipid -1 time_last_node thrustlast
+# shipid -1 time_end 0.0 0.0 0.0
 
+# shipid asteroidid time state mass_before_dropoff
+# shipid asteroidid time state mass_after_dropoff
 function write_solution(
     p::SequentialConvexProblem,
     filename
@@ -205,13 +85,15 @@ function write_solution(
                 write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(p.x0[n][k]))\n")
             else
                 temp = deepcopy(p.xf[n][k - 1])
-                temp[4:6] = p.x_nodes[n][k - 1][4:6, end]
+                temp[4:6] .-= p.Δvf[n][k - 1]
+                # temp[4:6] = p.x_nodes[n][k - 1][4:6, end]
 
                 write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(temp))\n")
             end
 
             if k == (p.segment_number[n] + 1) 
-                temp = deepcopy(p.xf[n][k - 1])
+                temp = deepcopy(p.xf[n][end])
+                temp[4:6] .-= p.Δvf[n][end]
                 temp[7] += p.Δm0[n][k]
     
                 write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(temp))")
@@ -221,7 +103,6 @@ function write_solution(
 
             temp = deepcopy(p.x0[n][k])
             temp[4:6] += p.Δv0[n][k]
-            temp[7] += p.Δm0[n][k]
 
             write(f, "$n $(p.id_journey[n][k]) $(convert_time_to_mjd(p.times_journey[n][k])) $(convert_to_actual_state_string(temp))\n")
 
@@ -229,7 +110,10 @@ function write_solution(
             for j in 1:(length(p.t_nodes[n][k]) - 1)
                 current_time = convert_time_to_mjd(p.times_journey[n][k] + p.t_nodes[n][k][j])
                 current_thrust = deepcopy(p.u_nodes[n][k][1:3, j]) * thrust * m_scale * a_scale * 1e3
-                next_time = convert_time_to_mjd(p.times_journey[n][k] + p.t_nodes[n][k][j + 1])
+                next_time = min(
+                    convert_time_to_mjd(p.times_journey[n][k] + p.t_nodes[n][k][j + 1]),
+                    convert_time_to_mjd(p.times_journey[n][k + 1])
+                )
 
                 # Limit thrust in the case of small overhead
                 if norm(current_thrust) > thrust * m_scale * a_scale * 1e3
