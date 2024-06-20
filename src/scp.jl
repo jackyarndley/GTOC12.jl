@@ -35,15 +35,52 @@ mutable struct SequentialConvexProblem{T <: Real}
     segment_number::Vector{Int64}
     objective_config::Union{MassConfig, LoggedMassConfig}
     dynamical_error::T
+    mass_overhead::T
     trust_region_factor::T
     optimizer
 end
 
 Base.show(io::IO, p::SequentialConvexProblem) = begin
-    println(io, "A sequential convex problem")
+    println(io, "A sequential convex problem for GTOC12 using ", p.objective_config)
+    println(io)
 
-    println(io, "Target sequence: ", p.id_journey)
-    println(io, "Time sequence: ", p.times_journey)
+    total_deployments = 0
+    total_collections = 0
+
+
+    for n in 1:p.mixing_number
+        deployments = sum(p.Δm0[n] .≈ -40/m_scale)
+        collections = sum(p.Δm0[n] .> 0.0)
+
+        total_deployments += deployments
+        total_collections += collections
+
+        println(io, "Ship $n ($deployments deployments, $collections collections)")
+        println(io, "Sequence: ", join(get_id_label.(p.id_journey[n]), " → "))
+        println(io, "Times: ", join([@sprintf("%.2f", convert_time_to_mjd(val)) for val in p.times_journey[n]], " → "))
+
+        if typeof(p.objective_config) == LoggedMassConfig
+            println(io, @sprintf("Fuel starting: %.2fkg", m_scale*exp(p.x_nodes[n][1][7, 1]) - 500.0 - 40.0*deployments))
+            println(io, @sprintf("Fuel remaining: %.2fkg", m_scale*exp(p.x_nodes[n][end][7, end]) - 500.0 + m_scale*p.Δm0[n][end]))
+        else
+            println(io, @sprintf("Fuel starting: %.2fkg", m_scale*p.x_nodes[n][1][7, 1] - 500.0 - 40.0*deployments))
+            println(io, @sprintf("Fuel remaining: %.2fkg", m_scale*p.x_nodes[n][end][7, end] - 500.0 + m_scale*p.Δm0[n][end]))
+        end
+
+        println(io, @sprintf("Mass returned: %.2fkg", -m_scale*p.Δm0[n][end]))
+        println(io)
+    end
+
+    println(io, "Total ($total_deployments deployments, $total_collections, collections)")
+    println(io, @sprintf("Mass Returned: %.2fkg", -m_scale*sum([val[end] for val in p.Δm0])))
+
+    println(io, 
+        @sprintf("Average: %.2fkg (%.2f .. %.2f)", 
+            -m_scale*mean([val[end] for val in p.Δm0]),
+            -m_scale*maximum([val[end] for val in p.Δm0]),
+            -m_scale*minimum([val[end] for val in p.Δm0]),
+        )
+    )
 end
 
 
@@ -53,6 +90,7 @@ function SequentialConvexProblem(
     objective_config = LoggedMassConfig(),
     dynamical_error = 1e-6,
     trust_region_factor = 0.1,
+    mass_overhead = 0.01/m_scale
 )
     mixing_number = length(id_journey)
     segment_number = [length(id_journey[n]) - 1 for n in 1:mixing_number]
@@ -85,26 +123,27 @@ function SequentialConvexProblem(
         segment_number,
         objective_config,
         dynamical_error,
+        mass_overhead,
         trust_region_factor,
         Mosek.Optimizer
     )
 
     for n in 1:p.mixing_number
         push!(p.Δm0, get_mass_change_at_ids_mixed(
-            id_journey[n],
-            times_journey[n],
-            id_journey,
-            times_journey
+            p.id_journey[n],
+            p.times_journey[n],
+            p.id_journey,
+            p.times_journey
         ))
 
         push!(p.x0, [ephermeris_cartesian_from_id(
-            id_journey[n][i], 
-            times_journey[n][i]
+            p.id_journey[n][i], 
+            p.times_journey[n][i]
         )[:] for i in 1:(p.segment_number[n])])
 
         push!(p.xf, [ephermeris_cartesian_from_id(
-            id_journey[n][i], 
-            times_journey[n][i]
+            p.id_journey[n][i], 
+            p.times_journey[n][i]
         )[:] for i in 2:(p.segment_number[n] + 1)])
 
         push!(p.t_nodes, fill(Float64[], p.segment_number[n]))
@@ -228,7 +267,7 @@ function initialize_scp_guess!(
 
             Δv_use = max(norm(p.Δv0[n][k]) - p.Δv0_limit[n][k], 0.0) + max(norm(p.Δvf[n][k]) - p.Δvf_limit[n][k], 0.0) 
 
-            mf = m0/(exp(Δv_use) / g0_isp)
+            mf = m0/exp(Δv_use / g0_isp)
 
             if typeof(p.objective_config) == LoggedMassConfig
                 p.x0[n][k] = vcat(p.x0[n][k], log(m0))
@@ -259,6 +298,11 @@ end
 function convert_logged_mass_to_mass!(
     p::SequentialConvexProblem
 )
+    if typeof(p.objective_config) != LoggedMassConfig
+        error("Conversion to mass problem attempted on non logged-mass problem.")
+        return
+    end
+
     p.objective_config = MassConfig()
 
     for n in 1:p.mixing_number, k in 1:p.segment_number[n]
@@ -297,12 +341,6 @@ function solve!(
     model = Model(p.optimizer)
     set_silent(model)
     set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-10)
-
-    # if adaptive_time
-    #     set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-4)
-    # else
-    #     set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-10)
-    # end
 
     # State variables
     x = [[] for _ in 1:mixing]
@@ -543,9 +581,9 @@ function solve!(
             end
 
             mass_end_con[n] = if typeof(p.objective_config) == LoggedMassConfig
-                [@constraint(model, x[n][end][7, end] + m_violation[n] >= log(500/m_scale - p.Δm0[n][end]))]
+                [@constraint(model, x[n][end][7, end] + m_violation[n] >= log(500/m_scale + p.mass_overhead - p.Δm0[n][end]))]
             else
-                [@constraint(model, x[n][end][7, end] + m_violation[n] >= 500/m_scale - p.Δm0[n][end])]
+                [@constraint(model, x[n][end][7, end] + m_violation[n] >= 500/m_scale + p.mass_overhead - p.Δm0[n][end])]
             end
 
 
@@ -560,10 +598,8 @@ function solve!(
             end
 
             actual_time_con[n] = [
-                # @constraint(model, actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
-                # @constraint(model, actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale)
-                # @constraint(model, actual_time[n][1] .== p.times_journey[n][1])
-                # @constraint(model, actual_time[n][2] .== p.times_journey[n][2])
+                @constraint(model, actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
+                @constraint(model, actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale)
             ]
 
             dropoff = p.Δm0[n] .≈ -40/m_scale
@@ -587,8 +623,6 @@ function solve!(
         )
         
         JuMP.optimize!(model)
-
-        # display(JuMP.value.(x_violation[1][4]))
 
         for n in 1:mixing
             p.times_journey[n] = JuMP.value.(actual_time[n])
@@ -623,18 +657,27 @@ function solve!(
                     p.times_journey[n][k+1]
                 )[:]
 
-                # if k != 1
-                #     p.x0[n][k][7] = p.xf[n][k - 1][7] + p.Δm0[n][k] 
-                # else
-                #     p.x0[n][k][7] = value.(x[n][k][7, 1])
-                # end
+                # display(p.x0[n][k])
+                # display(p.xf[n][k])
 
-                p.x0[n][k][7] = value.(x[n][k][7, 1])
-                p.xf[n][k][7] = value.(x[n][k][7, end])
+                if k != 1
+                    if typeof(p.objective_config) == LoggedMassConfig
+                        p.x0[n][k][7] = log(exp(p.xf[n][k - 1][7]) + p.Δm0[n][k])
+                    else
+                        p.x0[n][k][7] = p.xf[n][k - 1][7] + p.Δm0[n][k] 
+                    end
+                else
+                    p.x0[n][k][7] = value.(x[n][k][7, 1])
+                end
+
+                # display(p.x0[n][k][7])
+
+                # p.x0[n][k][7] = value.(x[n][k][7, 1])
+                # p.xf[n][k][7] = value.(x[n][k][7, end])
 
                 # p.xf[n][k][7] = value.(x[n][k][7, end])
 
-                # p.u_nodes[n][k][4, :] = norm.(eachcol(p.u_nodes[n][k][1:3, :]))
+                p.u_nodes[n][k][4, :] = norm.(eachcol(p.u_nodes[n][k][1:3, :]))
 
                 p.x_nodes[n][k] = integrate_trajectory(
                     p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
@@ -645,7 +688,7 @@ function solve!(
                 )
 
                 # p.x0[n][k][7] = p.x_nodes[n][k][7, 1]
-                # p.xf[n][k][7] = p.x_nodes[n][k][7, end]
+                p.xf[n][k][7] = p.x_nodes[n][k][7, end]
 
                 # if k != length(p.x0[n])
                 #     p.x0[n][k + 1][7] = 
@@ -702,7 +745,7 @@ function solve!(
             maximum_error_mixing = max(maximum_error_mixing, current_maximum_error)
         end
 
-        if maximum_error_mixing <= 2e-7
+        if maximum_error_mixing <= p.dynamical_error
             break
         end
 

@@ -702,7 +702,7 @@ function load_result_files(result_files; low_thrust_dv = false)
     bonus_optimal = true
 
     bonus = if bonus_optimal
-        open("results/bonuses/bonus_coefficients.txt") do f
+        open("data/bonus_coefficients.txt") do f
             [parse(Float64, split(line)[1]) for line in readlines(f)]
         end
     else

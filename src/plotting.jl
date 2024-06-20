@@ -1,17 +1,23 @@
 
 
 
-function get_event_label_and_color(
-    id,
-    mass_change
+function get_id_label(
+    id
 )
-    label = if id == 0
+    return if id == 0
         "Earth"
     elseif id < 0
         ["Venus", "Earth", "Mars"][-id - 1]
     else
         string(id)
     end
+end
+
+function get_event_label_and_color(
+    id,
+    mass_change
+)
+    label = get_id_label(id)
 
     color = :black
 
