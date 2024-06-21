@@ -122,82 +122,119 @@ end
 
 function plot_trajectory(
     p::SequentialConvexProblem;
-    solution_index = 1
+    plot_3d = false,
 )
-    n = solution_index
-
     f = Figure(size = (900, 800), backgroundcolor = :white)
 
-    x_nodes_combined = hcat([val[:, 1:end-1] for val in p.x_nodes[n]]...)
-
-    ax1 = Axis(
-        f[1:2, 1:2]; 
-        xlabel = "x [AU]", 
-        ylabel = "y [AU]", 
-        aspect = 1
-    )
-
-    for k in 1:length(p.x0[n])
-        scatter!(ax1,
-            p.x0[n][k][1],
-            p.x0[n][k][2],
+    ax1 = if plot_3d
+        Axis3(
+            f[1:2, 1:2]; 
+            xlabel = "x [AU]", 
+            ylabel = "y [AU]", 
+            zlabel = "z [AU]", 
+            # limits = (-3.0, 3.0, -3.0, 3.0, -3.0, 3.0),
+            # aspect = 1,
+            # perspectiveness = 1.0,
         )
-
-        if k == length(p.x0[n])
-            scatter!(ax1,
-                p.xf[n][k][1],
-                p.xf[n][k][2],
-            )
-        end
-
-        t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
-
-        if !(t_fine[end] ≈ p.t_nodes[n][k][end])
-            push!(t_fine, p.t_nodes[n][k][end])
-        end
-
-        x_fine = integrate_trajectory(
-            p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
-            t_fine;
-            t_nodes = p.t_nodes[n][k],
-            u_nodes = p.u_nodes[n][k],
-            p.objective_config,
+    else
+        Axis(
+            f[1:2, 1:2]; 
+            xlabel = "x [AU]", 
+            ylabel = "y [AU]", 
+            limits = (-3.0, 3.0, -3.0, 3.0),
+            aspect = 1
         )
+    end
+
+    # scatter!(ax1,
+    #     [0.0],
+    #     [0.0],
+    #     [0.0],
+    #     color = :black
+    # )
+
+    ν_plot = collect(LinRange(0.0, 2π, 400)) 
+
+    for (i, planet_classical) in enumerate(eachcol(planets_classical))
+        temp = repeat(planet_classical, 1, 400)
+        temp[6, :] .= ν_plot
+        temp = hcat(classical_to_cartesian.(eachcol(temp))...)
 
         lines!(ax1,
-            x_fine[1, :],
-            x_fine[2, :],
+            temp[1, :],
+            temp[2, :],
+            temp[3, :],
+            linestyle = :dashdot,
+            color = Makie.wong_colors()[[2, 1, 6][i]]
         )
+    end
 
+    for n in 1:p.mixing_number
+        for k in 1:p.segment_number[n]
 
+            scatter!(ax1,
+                p.x0[n][k][1],
+                p.x0[n][k][2],
+                p.x0[n][k][3],
+            )
 
-        thrust_force = if p.objective_config == LoggedMassConfig()
-            temp = exp.(p.x_nodes[n][k][7, 1:end-1])
-            p.u_nodes[n][k][4, :] .* temp * thrust * m_scale * a_scale * 1e3
-        else
-            p.u_nodes[n][k][4, :] * thrust * m_scale * a_scale * 1e3
+            if k == p.segment_number[n]
+                scatter!(ax1,
+                    p.xf[n][k][1],
+                    p.xf[n][k][2],
+                    p.xf[n][k][3],
+                )
+            end
+
+            t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
+
+            if !(t_fine[end] ≈ p.t_nodes[n][k][end])
+                push!(t_fine, p.t_nodes[n][k][end])
+            end
+
+            x_fine = integrate_trajectory(
+                p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+                t_fine;
+                t_nodes = p.t_nodes[n][k],
+                u_nodes = p.u_nodes[n][k],
+                p.objective_config,
+            )
+
+            lines!(ax1,
+                x_fine[1, :],
+                x_fine[2, :],
+                x_fine[3, :],
+            )
+
+            thrust_force = if p.objective_config == LoggedMassConfig()
+                temp = exp.(p.x_nodes[n][k][7, 1:end-1])
+                p.u_nodes[n][k][4, :] .* temp * thrust * m_scale * a_scale * 1e3
+            else
+                p.u_nodes[n][k][4, :] * thrust * m_scale * a_scale * 1e3
+            end
+
+            sel = thrust_force .>= 0.01
+
+            thrust_vectors = stack(normalize.(eachcol(p.u_nodes[n][k][1:3, :]))).*thrust_force'
+
+            length_scale = 0.2
+
+            for i in collect(1:length(thrust_force))[sel]
+                lines!(ax1,
+                    [p.x_nodes[n][k][1, i], p.x_nodes[n][k][1, i] + length_scale*thrust_vectors[1, i]],
+                    [p.x_nodes[n][k][2, i], p.x_nodes[n][k][2, i] + length_scale*thrust_vectors[2, i]],
+                    [p.x_nodes[n][k][3, i], p.x_nodes[n][k][3, i] + length_scale*thrust_vectors[3, i]],
+                    color = :black,
+                    alpha = 0.5,
+                    linewidth = 1,
+                )
+            end
         end
-
-        sel = thrust_force .>= 0.01
-
-        thrust_vectors = stack(normalize.(eachcol(p.u_nodes[n][k][1:3, :]))).*thrust_force'
-
-        arrows!(ax1,
-            p.x_nodes[n][k][1, 1:end-1][sel],
-            p.x_nodes[n][k][2, 1:end-1][sel],
-            thrust_vectors[1, sel],
-            thrust_vectors[2, sel],
-            lengthscale = 0.2,
-            arrowhead = ' ',
-            linecolor = (:black, 0.4),
-        )
-
     end
 
 
 
-
-    limits!(ax1, -3.0, 3.0, -3.0, 3.0)
+    
 
     # hidedecorations!(
     #     ax1

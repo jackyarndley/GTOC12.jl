@@ -4,9 +4,9 @@ include("header.jl")
 
 
 g0 = 9.80665e-3/(r_scale/t_scale^2) # LU/TU^2
-isp = 4000/t_scale # TU
-g0_isp = g0*isp
 g0_isp = 19.6133*t_scale/r_scale
+isp = g0_isp/g0
+
 
 thrust_scale = 1.0
 thrust = thrust_scale*0.5e-3/(m_scale*r_scale/t_scale^2)
@@ -32,7 +32,7 @@ scp_iterations = 20
 
 node_time_spacing = 5.0*day_scale
 
-node_time_spacing = 358.79*day_scale/40
+node_time_spacing = 348.79*day_scale/40
 
 
 
@@ -41,7 +41,7 @@ id_journey = [
 ]
 
 times_journey = [
-    [0.0, 358.79*day_scale]
+    [0.0, 348.79*day_scale]
 ]
 
 
@@ -74,7 +74,7 @@ solve!(p,
 
 plot_thrust_information(p)
 
-plot_trajectory(p)
+plot_trajectory(p; plot_3d = true)
 
 
 

@@ -408,8 +408,10 @@ function solve!(
 
         # Limit maximum mass at start
         if typeof(p.objective_config) == LoggedMassConfig
+            # @constraint(model, x[n][1][7, 1] == log(1000/m_scale))
             @constraint(model, x[n][1][7, 1] <= log(3000/m_scale))
         else
+            # @constraint(model, x[n][1][7, 1] == 1000/m_scale)
             @constraint(model, x[n][1][7, 1] <= 3000.0/m_scale)
         end
     end
@@ -586,21 +588,22 @@ function solve!(
                 [@constraint(model, x[n][end][7, end] + m_violation[n] >= 500/m_scale + p.mass_overhead - p.Δm0[n][end])]
             end
 
+            if adaptive_time
+                for con in time_start_movement_con[n]
+                    delete(model, con)
+                end
 
-            for con in time_start_movement_con[n]
-                delete(model, con)
+                time_start_movement_con[n] = [@constraint(model, -2e-1*current_trust_region_factor <= Δt_start[n] <= 2e-1*current_trust_region_factor)]
+                
+                for con in actual_time_con[n]
+                    delete(model, con)
+                end
+
+                actual_time_con[n] = [
+                    @constraint(model, actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
+                    @constraint(model, actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale)
+                ]
             end
-
-            time_start_movement_con[n] = [@constraint(model, -2e-1*current_trust_region_factor <= Δt_start[n] <= 2e-1*current_trust_region_factor)]
-            
-            for con in actual_time_con[n]
-                delete(model, con)
-            end
-
-            actual_time_con[n] = [
-                @constraint(model, actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
-                @constraint(model, actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale)
-            ]
 
             dropoff = p.Δm0[n] .≈ -40/m_scale
             pickup = p.Δm0[n] .> 0.0
@@ -687,13 +690,14 @@ function solve!(
                     p.objective_config,
                 )
 
+                # display(p.x_nodes[n][k])
+
                 # p.x0[n][k][7] = p.x_nodes[n][k][7, 1]
                 p.xf[n][k][7] = p.x_nodes[n][k][7, end]
 
                 # if k != length(p.x0[n])
                 #     p.x0[n][k + 1][7] = 
                 # end
-
 
                 push!(
                     dynamical_errors, 
@@ -745,7 +749,7 @@ function solve!(
             maximum_error_mixing = max(maximum_error_mixing, current_maximum_error)
         end
 
-        if maximum_error_mixing <= p.dynamical_error
+        if (maximum_error_mixing <= p.dynamical_error) || (termination_status(model) ∉ [OPTIMAL, SLOW_PROGRESS])
             break
         end
 
