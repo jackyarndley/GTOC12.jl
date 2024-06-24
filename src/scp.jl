@@ -178,7 +178,7 @@ function initialize_scp_discretization!(
             t_nodes_segment = vcat(t_nodes_segment, Δt_segment)
         end
     
-        if id_journey[n][i] == id_journey[n][i + 1]
+        if p.id_journey[n][i] == p.id_journey[n][i + 1]
             t_nodes_segment = [0.0, Δt_segment/2, Δt_segment]
         end
 
@@ -240,7 +240,7 @@ function initialize_scp_guess!(
         m0 = 3000.0 / m_scale
 
         for k in 1:p.segment_number[n]
-            Δv0, Δvf = if p.id_journey[n][k] == id_journey[n][k + 1]
+            Δv0, Δvf = if p.id_journey[n][k] == p.id_journey[n][k + 1]
                 zeros(Float64, 3), zeros(Float64, 3)
             else
                 temp = deepcopy(p.xf[n][k])
@@ -263,7 +263,7 @@ function initialize_scp_guess!(
             p.Δv0_limit[n][k] = (p.id_journey[n][k] == 0) ? 6.0/v_scale : 0.0
 
             p.Δvf[n][k] = Δvf[:]
-            p.Δvf_limit[n][k] = ((k == p.segment_number[n]) && id_journey[n][k+1] == -3) ? 6.0/v_scale : 0.0
+            p.Δvf_limit[n][k] = ((k == p.segment_number[n]) && p.id_journey[n][k+1] == -3) ? 6.0/v_scale : 0.0
 
             Δv_use = max(norm(p.Δv0[n][k]) - p.Δv0_limit[n][k], 0.0) + max(norm(p.Δvf[n][k]) - p.Δvf_limit[n][k], 0.0) 
 
@@ -517,11 +517,11 @@ function solve!(
                 )
 
                 start_position_function(time) = begin
-                    ephermeris_cartesian_from_id(id_journey[n][k], time)[:]
+                    ephermeris_cartesian_from_id(p.id_journey[n][k], time)[:]
                 end 
 
                 final_position_function(time) = begin
-                    ephermeris_cartesian_from_id(id_journey[n][k+1], time)[:]
+                    ephermeris_cartesian_from_id(p.id_journey[n][k+1], time)[:]
                 end 
 
                 start_jac = FiniteDiff.finite_difference_jacobian(start_position_function, [p.times_journey[n][k]])
