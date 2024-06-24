@@ -9,15 +9,18 @@ using DiffEqCallbacks
 using DifferentialEquations
 using ForwardDiff
 using CairoMakie
+using GraphMakie
+using Graphs
+using ColorSchemes
 
 include("assorted.jl")
 include("configuration.jl")
 include("integration.jl")
 include("lambert.jl")
 include("scp.jl")
+include("mip.jl")
 include("transforms.jl")
 include("plotting.jl")
-include("mip.jl")
 include("data_handling.jl")
 
 # Scaling constants

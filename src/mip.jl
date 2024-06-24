@@ -1,6 +1,4 @@
 
-include("header.jl")
-
 
 
 mutable struct MixedIntegerProblem{T <: Real}
@@ -180,7 +178,8 @@ function solve!(
         if include_intermediate_transfer_cost
             @constraint(model, sum(intermediate[n]) == 1)
 
-            [@constraint(model, intermediate[n][i, j] .>= -1.0 + sum(deployment[n][:, i, p.deployment_arcs[n]]) + sum(collection[n][j, :, 1])) for (i, j) in eachindex(intermediate[n])]
+            [@constraint(model, intermediate[n][i, j] .<= sum(deployment[n][:, i, p.deployment_arcs[n]])) for (i, j) in eachindex(intermediate[n])]
+            [@constraint(model, intermediate[n][i, j] .<= sum(collection[n][i, :, 1])) for (i, j) in eachindex(intermediate[n])]
         end
 
         # Only permit low cost first transfers
@@ -229,7 +228,7 @@ function solve!(
     end
 
     optimize!(model)
-
+    
     if termination_status(model) == INFEASIBLE_OR_UNBOUNDED || termination_status(model) == INFEASIBLE
         println("\nNo solution found.")
         return
