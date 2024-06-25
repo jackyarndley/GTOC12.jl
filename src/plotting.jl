@@ -256,12 +256,19 @@ function plot_graph(
     stage_Δx = 0.1
     node_Δy = 0.1
 
-    edge_list = []
-    edge_color = []
-    edge_style = []
+    unused_edge_list = []
+
+    used_edge_list = []
+    used_edge_color = []
+    used_edge_style = []
+    used_edge_width = []
+
+
+
     layout = []
 
-    color_range = ColorSchemes.vik50
+    # color_range = ColorSchemes.tab10
+    color_range = ColorSchemes.tableau_jewel_bright
 
     for stage in 1:p.deployment_nums[1]
         for i in 1:stage_size
@@ -272,15 +279,24 @@ function plot_graph(
     for stage in 1:p.deployment_arcs[1]
         for i in 1:stage_size, j in 1:stage_size
             if (p.deployment_cost[1][i, j, stage] <= p.cost_limit) && (i != j)
-                push!(edge_list, (i + stage_size*(stage-1), j + stage_size*stage))
-                # push!(edge_color, (Makie.wong_colors()[1], 0.4))
-                push!(edge_color, (:black, 0.1))
-                push!(edge_style, :solid)
+                used_check = false
 
-                for k in p.solutions:-1:1
+                for k in 1:p.solutions
                     if p.id_journey_solutions[k][1][stage + 1] == p.id_subset[i] && p.id_journey_solutions[k][1][stage + 2] == p.id_subset[j]
-                        edge_color[end] = (color_range[end + 1 - k], 0.7)
+                        if used_check
+                            used_edge_width[end] += 2
+                        else
+                            push!(used_edge_list, (i + stage_size*(stage-1), j + stage_size*stage))
+                            push!(used_edge_color, (color_range[(k-1) % length(color_range) + 1], 1.0))
+                            push!(used_edge_style, :solid)
+                            push!(used_edge_width, 4)
+                            used_check = true
+                        end
                     end
+                end
+
+                if !used_check
+                    push!(unused_edge_list, (i + stage_size*(stage-1), j + stage_size*stage))
                 end
             end
         end
@@ -290,15 +306,24 @@ function plot_graph(
 
     for i in 1:stage_size, j in 1:stage_size
         if (p.intermediate_cost[1][i, j] <= p.cost_limit)
-            push!(edge_list, (collection_offset - stage_size + i, collection_offset + j))
-            # push!(edge_color, (Makie.wong_colors()[2], 0.4))
-            push!(edge_color, (:black, 0.1))
-            push!(edge_style, :solid)
+            used_check = false
 
-            for k in p.solutions:-1:1
+            for k in 1:p.solutions
                 if p.id_journey_solutions[k][1][p.deployment_nums[1] + 1] == p.id_subset[i] && p.id_journey_solutions[k][1][p.deployment_nums[1] + 2] == p.id_subset[j]
-                    edge_color[end] = (color_range[end + 1 - k], 0.7)
+                    if used_check
+                        used_edge_width[end] += 2
+                    else
+                        push!(used_edge_list, (collection_offset - stage_size + i, collection_offset + j))
+                        push!(used_edge_color, (color_range[(k-1) % length(color_range) + 1], 1.0))
+                        push!(used_edge_style, :solid)
+                        push!(used_edge_width, 4)
+                        used_check = true
+                    end
                 end
+            end
+
+            if !used_check
+                push!(unused_edge_list, (collection_offset - stage_size + i, collection_offset + j))
             end
         end
     end
@@ -312,47 +337,76 @@ function plot_graph(
     for stage in 1:p.collection_arcs[1]
         for i in 1:stage_size, j in 1:stage_size
             if (p.collection_cost[1][i, j, stage] <= p.cost_limit) && (i != j)
-                push!(edge_list, (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
-                # push!(edge_color, (Makie.wong_colors()[3], 0.4))
-                push!(edge_color, (:black, 0.1))
-                push!(edge_style, :solid)
+                used_check = false
 
-                for k in p.solutions:-1:1 
+                for k in 1:p.solutions
                     if p.id_journey_solutions[k][1][p.deployment_nums[1] + 1 + stage] == p.id_subset[i] && p.id_journey_solutions[k][1][p.deployment_nums[1] + 2 + stage] == p.id_subset[j]
-                        edge_color[end] = (color_range[end + 1 - k], 0.7)
+                        if used_check
+                            used_edge_width[end] += 2
+                        else
+                            push!(used_edge_list, (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
+                            push!(used_edge_color, (color_range[(k-1) % length(color_range) + 1], 1.0))
+                            push!(used_edge_style, :solid)
+                            push!(used_edge_width, 4)
+                            used_check = true
+                        end
                     end
+                end
+
+                if !used_check
+                    push!(unused_edge_list, (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
                 end
             end
         end
     end
     
-    g = SimpleDiGraph(length(layout))
+    unused_graph = SimpleDiGraph(length(layout))
+    used_graph = SimpleDiGraph(length(layout))
 
+    [add_edge!(unused_graph, e) for e in unused_edge_list]
+    [add_edge!(used_graph, e) for e in used_edge_list]
 
-    [add_edge!(g, e) for e in edge_list]
 
     fixed_layout(_) = layout
 
-    f = Figure(size = (3000, 2000), backgroundcolor = :white)
+    f = Figure(size = (1000, 600), backgroundcolor = :white)
 
     ax = Axis(
         f[1, 1];
     )
 
-    graphplot!(ax, g, 
+
+    graphplot!(ax, unused_graph, 
+        layout=fixed_layout,
+        size = (800, 800),
+        edge_plottype=:beziersegments,
+        edge_color= (:black, 0.1),
+        edge_width=2,
+        arrow_show = false,
+        # ilabels = repeat(p.id_subset, p.deployment_nums[1] + p.collection_nums[1]),
+        # ilabels_fontsize = 9,
+        node_size = 0,
+        # node_marker=Circle;
+        # arrow_shift=:end
+    )
+
+
+
+    graphplot!(ax, used_graph, 
         layout=fixed_layout,
         size = (800, 800),
         # node_color=[:black, :red, :red, :red, :black],
         edge_plottype=:beziersegments,
-        edge_color=edge_color,
+        edge_color=used_edge_color,
         # node_color = (Makie.wong_colors()[1], 0.4),
-        edge_attr = (; linestyle = edge_style),
-        edge_width=2,
+        edge_attr = (; linestyle = used_edge_style),
+        edge_width= used_edge_width,
+        arrow_show = false,
         ilabels = repeat(p.id_subset, p.deployment_nums[1] + p.collection_nums[1]),
         ilabels_fontsize = 9,
         node_size = 30,
         node_marker=Circle;
-        arrow_shift=:end
+        # arrow_shift=:end
     )
 
 
@@ -368,7 +422,7 @@ function plot_graph(
     resize_to_layout!(f)
     display(f)
 
-    save("test.png", f)
+    # save("test.png", f)
 
     return
 end

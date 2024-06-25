@@ -72,7 +72,7 @@ function MixedIntegerProblem(
         for n in 1:mixing_number
     ]
 
-    intermediate_cost = [
+    intermediate_cost = 1.0.*[
         stack(stack(get_transfer_dv(id, times_deployment[n][end] + max(0.0, times_collection[n][1] - times_deployment[n][end] - 500*day_scale), id_subset, times_collection[n][1] - times_deployment[n][end] - max(0.0, times_collection[n][1] - times_deployment[n][end] - 500*day_scale)) for id in id_subset))
         for n in 1:mixing_number
     ]
@@ -103,7 +103,8 @@ function solve!(
     self_cleaning = false,
     permit_intermediate_transfer = true,
     include_intermediate_transfer_cost = false,
-    solutions_maximum = 1
+    solutions_relative_allowance = 0.1,
+    solutions_count_maximum = 100,
 )
     subset_size = length(p.id_subset)
 
@@ -178,8 +179,7 @@ function solve!(
         if include_intermediate_transfer_cost
             @constraint(model, sum(intermediate[n]) == 1)
 
-            [@constraint(model, intermediate[n][i, j] .<= sum(deployment[n][:, i, p.deployment_arcs[n]])) for (i, j) in eachindex(intermediate[n])]
-            [@constraint(model, intermediate[n][i, j] .<= sum(collection[n][i, :, 1])) for (i, j) in eachindex(intermediate[n])]
+            [@constraint(model, 2*intermediate[n][i, j] .<= sum(deployment[n][:, i, p.deployment_arcs[n]]) + sum(collection[n][j, :, 1])) for (i, j) in eachindex(intermediate[n])]
         end
 
         # Only permit low cost first transfers
@@ -224,11 +224,12 @@ function solve!(
 
     if solutions_maximum > 1
         set_attribute(model, "PoolSearchMode", 2)
-        set_attribute(model, "PoolSolutions", solutions_maximum)
+        set_attribute(model, "PoolGap", solutions_relative_allowance)
+        set_attribute(model, "PoolSolutions", solutions_count_maximum)
     end
 
     optimize!(model)
-    
+
     if termination_status(model) == INFEASIBLE_OR_UNBOUNDED || termination_status(model) == INFEASIBLE
         println("\nNo solution found.")
         return
@@ -242,26 +243,28 @@ function solve!(
         p.solutions += 1
     end
 
-    for i in 1:min(result_count(model), solutions_maximum)
+    for i in 1:min(result_count(model), solutions_count_maximum)
         deployment_value = [value.(x; result = i) for x in deployment]
         collection_value = [value.(x; result = i) for x in collection]
 
-        deployment_ids = [sort(filter(vals -> x[vals[1], vals[2], vals[3]] >= 0.9999, collect(eachindex(x))); by=x->x[3]) for x in deployment_value]
-        collection_ids = [sort(filter(vals -> x[vals[1], vals[2], vals[3]] >= 0.9999, collect(eachindex(x))); by=x->x[3]) for x in collection_value]
+        deployment_ids = [sort(filter(vals -> x[vals[1], vals[2], vals[3]] >= 0.5, collect(eachindex(x))); by=x->x[3]) for x in deployment_value]
+        collection_ids = [sort(filter(vals -> x[vals[1], vals[2], vals[3]] >= 0.5, collect(eachindex(x))); by=x->x[3]) for x in collection_value]
 
-        push!(p.id_journey_solutions, [
+        id_journey_solution = [
             vcat(
                 [0], 
                 p.id_subset[vcat([x[1] for x in deployment_ids], [deployment_ids[end][2]])],
                 p.id_subset[vcat([x[1] for x in collection_ids], [collection_ids[end][2]])],
                 [-3]
             ) for (deployment_ids, collection_ids) in zip(deployment_ids, collection_ids)
-        ])
+        ]
 
-        p.solutions += 1
+        if id_journey_solution ∉ p.id_journey_solutions
+            push!(p.id_journey_solutions, id_journey_solution)
+
+            p.solutions += 1
+        end
     end
-
-
 end
 
 

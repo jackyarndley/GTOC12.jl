@@ -112,17 +112,26 @@ end
 
 id_subset = [298 3889 4445 7103 10290 10649 10916 12577 14062 14079 15291 15906 16070 16110 18835 18913 19496 20616 20651 22313 24024 25663 27293 27414 28050 30492 31751 32796 34679 36517 36565 36716 38270 38514 41013 41509 41629 43596 46392 46789 46877 47175 47291 47647 49082 49251 50836 50898 53789 54572 55377 56717 57669 57998 59572 59916][:]
 
+id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987][:])
 
-mip_problem = MixedIntegerProblem(id_subset, [8], [8])
-mip_problem.cost_limit = 5/v_scale
+
+
+
+
+mip_problem = MixedIntegerProblem(id_subset, [5], [5])
+mip_problem.cost_limit = 6/v_scale
 
 
 
 solve!(mip_problem;
     # self_cleaning = true,
     include_intermediate_transfer_cost = true,
-    solutions_maximum = 49
+    solutions_relative_allowance = 0.1,
+    solutions_count_maximum = 10
 )
+
+plot_graph(mip_problem)
+
 
 
 
@@ -177,4 +186,7 @@ for i in 1:length(scp_problem.u_nodes[1])
 end
 
 
-plot_graph(mip_problem)
+
+
+
+
