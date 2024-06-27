@@ -440,3 +440,165 @@ function plot_graph(
 
     return
 end
+
+
+
+
+
+function plot_trajectory_detailed(
+    p::SequentialConvexProblem
+)
+    f = Figure(size = (1200, 600), backgroundcolor = :white)
+
+    ax1 = Axis(
+        f[1:2, 1]; 
+        # xlabel = "x [AU]", 
+        # ylabel = "y [AU]", 
+        limits = (-3.2, 3.2, -3.2, 3.2),
+        aspect = 1
+    )
+
+    ax2 = Axis3(
+        f[1, 2]; 
+        # xlabel = "x [AU]", 
+        # ylabel = "y [AU]", 
+        limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -1.0, 1.0),
+        azimuth = -π/2,
+        elevation = π/20,
+        aspect = (3, 3, 1)
+    )
+
+    ax3 = Axis3(
+        f[2, 2]; 
+        # xlabel = "x [AU]", 
+        # ylabel = "y [AU]", 
+        limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -1.0, 1.0),
+        azimuth = 0.0,
+        elevation = π/20,
+        aspect = (3, 3, 1)
+    )
+
+
+    # scatter!(ax1,
+    #     [0.0],
+    #     [0.0],
+    #     [0.0],
+    #     color = :black
+    # )
+
+    for ax in [ax1, ax2, ax3]
+        ν_plot = collect(LinRange(0.0, 2π, 400)) 
+
+        for (i, planet_classical) in enumerate(eachcol(planets_classical))
+            temp = repeat(planet_classical, 1, 400)
+            temp[6, :] .= ν_plot
+            temp = hcat(classical_to_cartesian.(eachcol(temp))...)
+
+            lines!(ax,
+                temp[1, :],
+                temp[2, :],
+                temp[3, :],
+                linestyle = :dashdot,
+                color = Makie.wong_colors()[[2, 1, 6][i]]
+            )
+        end
+
+        for (i, asteroid_classical) in enumerate(eachcol(asteroids_classical[:, [15184, 12286]]))
+            temp = repeat(asteroid_classical, 1, 400)
+            temp[6, :] .= ν_plot
+            temp = hcat(classical_to_cartesian.(eachcol(temp))...)
+
+            lines!(ax,
+                temp[1, :],
+                temp[2, :],
+                temp[3, :],
+                linestyle = :dashdot,
+                linewidth = 2,
+                alpha = 0.5,
+                color = :black
+            )
+        end
+
+
+        for n in 1:p.mixing_number
+            for k in 1:p.segment_number[n]
+                t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
+
+                if !(t_fine[end] ≈ p.t_nodes[n][k][end])
+                    push!(t_fine, p.t_nodes[n][k][end])
+                end
+
+                x_fine = integrate_trajectory(
+                    p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+                    t_fine;
+                    t_nodes = p.t_nodes[n][k],
+                    u_nodes = p.u_nodes[n][k],
+                    p.objective_config,
+                )
+
+                lines!(ax,
+                    x_fine[1, :],
+                    x_fine[2, :],
+                    x_fine[3, :],
+                    color = :black,
+                    alpha = 1.0,
+                    linestyle = :solid
+                )
+
+                scatter!(ax,
+                    p.x0[n][k][1],
+                    p.x0[n][k][2],
+                    p.x0[n][k][3],
+                )
+
+                if k == p.segment_number[n]
+                    scatter!(ax,
+                        p.xf[n][k][1],
+                        p.xf[n][k][2],
+                        p.xf[n][k][3],
+                    )
+                end
+
+
+                text = if p.id_journey[n][k] == 0
+                    "Earth Departure"
+                elseif p.Δm0[n][k] < 0.0
+                    "Dropoff"
+                else 
+                    "Pickup"
+                end
+
+                text!(ax, 
+                    p.x0[n][k][1],
+                    p.x0[n][k][2],
+                    p.x0[n][k][3],
+                    text = text,
+                    align = (:center, :bottom),
+                    fontsize = 10,
+                )
+
+                if k == p.segment_number[n]
+                    text!(ax, 
+                        p.xf[n][k][1],
+                        p.xf[n][k][2],
+                        p.xf[n][k][3],
+                        text = "Earth Dropoff",
+                        align = (:center, :bottom),
+                        fontsize = 10,
+                    )
+                end
+
+            end
+        end
+
+
+        hidedecorations!(ax)
+        hidespines!(ax)
+
+    end
+
+    resize_to_layout!(f)
+    display(f)
+
+    return
+end

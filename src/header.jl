@@ -9,9 +9,12 @@ using DiffEqCallbacks
 using DifferentialEquations
 using ForwardDiff
 using CairoMakie
+using GLMakie
 using GraphMakie
 using Graphs
 using ColorSchemes
+
+CairoMakie.activate!() 
 
 include("assorted.jl")
 include("configuration.jl")
