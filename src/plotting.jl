@@ -249,6 +249,11 @@ end
 
 function plot_graph(
     p::MixedIntegerProblem;
+    plot_optimal_path = false,
+    plot_pruned = true,
+    output_file = nothing,
+    selection_index = 1,
+    figure_size = (900, 340)
 )
 
     stage_size = length(p.id_subset)
@@ -266,36 +271,39 @@ function plot_graph(
     layout = []
 
     # color_range = ColorSchemes.tab10
-    color_range = ColorSchemes.tableau_jewel_bright
+    color_range = ColorSchemes.tableau_10
+    # color_range = ColorSchemes.tableau_jewel_bright
     # color_range = ColorSchemes.tableau_miller_stone
 
-    for stage in 1:p.deployment_nums[1]
+    for stage in 1:p.deployment_nums[selection_index]
         for i in 1:stage_size
             push!(layout, ((stage - 1)*stage_Δx, -(i-1)*node_Δy))
         end
     end
 
-    for stage in 1:p.deployment_arcs[1]
+    for stage in 1:p.deployment_arcs[selection_index]
         for i in 1:stage_size, j in 1:stage_size
-            if (p.deployment_cost[1][i, j, stage] <= p.cost_limit) && (i != j)
+            if !plot_pruned || ((p.deployment_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
                 used_check = false
 
                 temp = []
 
-                for k in p.solutions:-1:1
-                # for k in 1:p.solutions
-                    if p.id_journey_solutions[k][1][stage + 1] == p.id_subset[i] && p.id_journey_solutions[k][1][stage + 2] == p.id_subset[j]
-                        used_check = true
+                if plot_optimal_path
+                    for k in p.solutions:-1:1
+                    # for k in 1:p.solutions
+                        if p.id_journey_solutions[k][selection_index][stage + 1] == p.id_subset[i] && p.id_journey_solutions[k][selection_index][stage + 2] == p.id_subset[j]
+                            used_check = true
 
-                        for l in temp
-                            used_edge_widths[l][end] += 3
+                            for l in temp
+                                used_edge_widths[l][end] += 3
+                            end
+
+                            push!(used_edge_lists[k], (i + stage_size*(stage-1), j + stage_size*stage))
+                            push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
+                            push!(used_edge_styles[k], :solid)
+                            push!(used_edge_widths[k], 4)
+                            push!(temp, k)
                         end
-
-                        push!(used_edge_lists[k], (i + stage_size*(stage-1), j + stage_size*stage))
-                        push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
-                        push!(used_edge_styles[k], :solid)
-                        push!(used_edge_widths[k], 4)
-                        push!(temp, k)
                     end
                 end
 
@@ -309,25 +317,27 @@ function plot_graph(
     collection_offset = length(layout)
 
     for i in 1:stage_size, j in 1:stage_size
-        if (p.intermediate_cost[1][i, j] <= p.cost_limit)
+        if !plot_pruned || (p.intermediate_cost[selection_index][i, j] <= p.cost_limit)
             used_check = false
 
             temp = []
 
-            for k in p.solutions:-1:1
-            # for k in 1:p.solutions
-                if p.id_journey_solutions[k][1][p.deployment_nums[1] + 1] == p.id_subset[i] && p.id_journey_solutions[k][1][p.deployment_nums[1] + 2] == p.id_subset[j]
-                    used_check = true
+            if plot_optimal_path
+                for k in p.solutions:-1:1
+                # for k in 1:p.solutions
+                    if p.id_journey_solutions[k][selection_index][p.deployment_nums[selection_index] + 1] == p.id_subset[i] && p.id_journey_solutions[k][selection_index][p.deployment_nums[selection_index] + 2] == p.id_subset[j]
+                        used_check = true
 
-                    for l in temp
-                        used_edge_widths[l][end] += 3
+                        for l in temp
+                            used_edge_widths[l][end] += 3
+                        end
+                    
+                        push!(used_edge_lists[k], (collection_offset - stage_size + i, collection_offset + j))
+                        push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
+                        push!(used_edge_styles[k], :solid)
+                        push!(used_edge_widths[k], 4)
+                        push!(temp, k)
                     end
-                
-                    push!(used_edge_lists[k], (collection_offset - stage_size + i, collection_offset + j))
-                    push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
-                    push!(used_edge_styles[k], :solid)
-                    push!(used_edge_widths[k], 4)
-                    push!(temp, k)
                 end
             end
 
@@ -337,33 +347,35 @@ function plot_graph(
         end
     end
 
-    for stage in (p.deployment_nums[1] + 1):(p.deployment_nums[1] + p.collection_nums[1])
+    for stage in (p.deployment_nums[selection_index] + 1):(p.deployment_nums[selection_index] + p.collection_nums[selection_index])
         for i in 1:stage_size
             push!(layout, ((stage - 1 + 1)*stage_Δx, -(i-1)*node_Δy))
         end
     end
 
-    for stage in 1:p.collection_arcs[1]
+    for stage in 1:p.collection_arcs[selection_index]
         for i in 1:stage_size, j in 1:stage_size
-            if (p.collection_cost[1][i, j, stage] <= p.cost_limit) && (i != j)
+            if !plot_pruned || ((p.collection_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
                 used_check = false
 
                 temp = []
 
-                for k in p.solutions:-1:1
-                # for k in 1:p.solutions
-                    if p.id_journey_solutions[k][1][p.deployment_nums[1] + 1 + stage] == p.id_subset[i] && p.id_journey_solutions[k][1][p.deployment_nums[1] + 2 + stage] == p.id_subset[j]
-                        used_check = true
+                if plot_optimal_path
+                    for k in p.solutions:-1:1
+                    # for k in 1:p.solutions
+                        if p.id_journey_solutions[k][selection_index][p.deployment_nums[selection_index] + 1 + stage] == p.id_subset[i] && p.id_journey_solutions[k][selection_index][p.deployment_nums[selection_index] + 2 + stage] == p.id_subset[j]
+                            used_check = true
 
-                        for l in temp
-                            used_edge_widths[l][end] += 3
+                            for l in temp
+                                used_edge_widths[l][end] += 3
+                            end
+                        
+                            push!(used_edge_lists[k], (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
+                            push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
+                            push!(used_edge_styles[k], :solid)
+                            push!(used_edge_widths[k], 4)
+                            push!(temp, k)
                         end
-                    
-                        push!(used_edge_lists[k], (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
-                        push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
-                        push!(used_edge_styles[k], :solid)
-                        push!(used_edge_widths[k], 4)
-                        push!(temp, k)
                     end
                 end
 
@@ -380,7 +392,7 @@ function plot_graph(
 
     fixed_layout(_) = layout
 
-    f = Figure(size = (1000, 600), backgroundcolor = :white)
+    f = Figure(size = figure_size, backgroundcolor = :white)
 
     ax = Axis(
         f[1, 1];
@@ -420,185 +432,39 @@ function plot_graph(
 
     graphplot!(ax, empty_graph, 
         layout=fixed_layout,
-        ilabels = repeat(p.id_subset, p.deployment_nums[1] + p.collection_nums[1]),
+        ilabels = repeat(p.id_subset, p.deployment_nums[selection_index] + p.collection_nums[selection_index]),
         ilabels_fontsize = 9,
         node_size = 30,
         node_marker=Circle;
     )
 
+    time_positions = vcat(
+        [stage_Δx*(stage-1) for stage in 1:p.deployment_nums[selection_index]],
+        [stage_Δx*(stage-1+1) for stage in (p.deployment_nums[selection_index] + 1):(p.deployment_nums[selection_index] + p.collection_nums[selection_index])]
+    )
+
+    time_strings = [@sprintf("MJD %.0f", v) for v in convert_time_to_mjd.(mip_problem.times_journey[selection_index][2:end-1])]
+
+    text!(ax, 
+        time_positions,
+        fill(0.7*node_Δy, length(time_positions)),
+        text = time_strings,
+        align = (:center, :center),
+        # fontsize = 12,
+    )
+
     hidedecorations!(ax)
     hidespines!(ax)
+
+    ylims!(ax, [-node_Δy*(length(p.id_subset) - 0.5), node_Δy])
     
 
-
-
-
-    resize_to_layout!(f)
+    # resize_to_layout!(f)
     display(f)
 
-    # save("test.png", f)
-
-    return
-end
-
-
-
-
-
-function plot_trajectory_detailed(
-    p::SequentialConvexProblem
-)
-    f = Figure(size = (1200, 600), backgroundcolor = :white)
-
-    ax1 = Axis(
-        f[1:2, 1]; 
-        # xlabel = "x [AU]", 
-        # ylabel = "y [AU]", 
-        limits = (-3.2, 3.2, -3.2, 3.2),
-        aspect = 1
-    )
-
-    ax2 = Axis3(
-        f[1, 2]; 
-        # xlabel = "x [AU]", 
-        # ylabel = "y [AU]", 
-        limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -1.0, 1.0),
-        azimuth = -π/2,
-        elevation = π/20,
-        aspect = (3, 3, 1)
-    )
-
-    ax3 = Axis3(
-        f[2, 2]; 
-        # xlabel = "x [AU]", 
-        # ylabel = "y [AU]", 
-        limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -1.0, 1.0),
-        azimuth = 0.0,
-        elevation = π/20,
-        aspect = (3, 3, 1)
-    )
-
-
-    # scatter!(ax1,
-    #     [0.0],
-    #     [0.0],
-    #     [0.0],
-    #     color = :black
-    # )
-
-    for ax in [ax1, ax2, ax3]
-        ν_plot = collect(LinRange(0.0, 2π, 400)) 
-
-        for (i, planet_classical) in enumerate(eachcol(planets_classical))
-            temp = repeat(planet_classical, 1, 400)
-            temp[6, :] .= ν_plot
-            temp = hcat(classical_to_cartesian.(eachcol(temp))...)
-
-            lines!(ax,
-                temp[1, :],
-                temp[2, :],
-                temp[3, :],
-                linestyle = :dashdot,
-                color = Makie.wong_colors()[[2, 1, 6][i]]
-            )
-        end
-
-        for (i, asteroid_classical) in enumerate(eachcol(asteroids_classical[:, [15184, 12286]]))
-            temp = repeat(asteroid_classical, 1, 400)
-            temp[6, :] .= ν_plot
-            temp = hcat(classical_to_cartesian.(eachcol(temp))...)
-
-            lines!(ax,
-                temp[1, :],
-                temp[2, :],
-                temp[3, :],
-                linestyle = :dashdot,
-                linewidth = 2,
-                alpha = 0.5,
-                color = :black
-            )
-        end
-
-
-        for n in 1:p.mixing_number
-            for k in 1:p.segment_number[n]
-                t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
-
-                if !(t_fine[end] ≈ p.t_nodes[n][k][end])
-                    push!(t_fine, p.t_nodes[n][k][end])
-                end
-
-                x_fine = integrate_trajectory(
-                    p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
-                    t_fine;
-                    t_nodes = p.t_nodes[n][k],
-                    u_nodes = p.u_nodes[n][k],
-                    p.objective_config,
-                )
-
-                lines!(ax,
-                    x_fine[1, :],
-                    x_fine[2, :],
-                    x_fine[3, :],
-                    color = :black,
-                    alpha = 1.0,
-                    linestyle = :solid
-                )
-
-                scatter!(ax,
-                    p.x0[n][k][1],
-                    p.x0[n][k][2],
-                    p.x0[n][k][3],
-                )
-
-                if k == p.segment_number[n]
-                    scatter!(ax,
-                        p.xf[n][k][1],
-                        p.xf[n][k][2],
-                        p.xf[n][k][3],
-                    )
-                end
-
-
-                text = if p.id_journey[n][k] == 0
-                    "Earth Departure"
-                elseif p.Δm0[n][k] < 0.0
-                    "Dropoff"
-                else 
-                    "Pickup"
-                end
-
-                text!(ax, 
-                    p.x0[n][k][1],
-                    p.x0[n][k][2],
-                    p.x0[n][k][3],
-                    text = text,
-                    align = (:center, :bottom),
-                    fontsize = 10,
-                )
-
-                if k == p.segment_number[n]
-                    text!(ax, 
-                        p.xf[n][k][1],
-                        p.xf[n][k][2],
-                        p.xf[n][k][3],
-                        text = "Earth Dropoff",
-                        align = (:center, :bottom),
-                        fontsize = 10,
-                    )
-                end
-
-            end
-        end
-
-
-        hidedecorations!(ax)
-        hidespines!(ax)
-
+    if !isnothing(output_file)
+        save(output_file, f)
     end
-
-    resize_to_layout!(f)
-    display(f)
 
     return
 end

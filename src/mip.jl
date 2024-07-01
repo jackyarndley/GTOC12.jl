@@ -222,7 +222,7 @@ function solve!(
         )
     end
 
-    if solutions_maximum > 1
+    if solutions_count_maximum > 1
         set_attribute(model, "PoolSearchMode", 2)
         set_attribute(model, "PoolGap", solutions_relative_allowance)
         set_attribute(model, "PoolSolutions", solutions_count_maximum)

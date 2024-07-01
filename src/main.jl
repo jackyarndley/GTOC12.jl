@@ -1,6 +1,7 @@
 include("header.jl")
 
 GLMakie.activate!()
+CairoMakie.activate!()
 
 
 
@@ -92,8 +93,6 @@ plot_thrust_information(p)
 plot_trajectory(p)
 
 
-plot_trajectory_detailed(p)
-
 
 
 plot_trajectory(p; plot_3d = true)
@@ -127,21 +126,6 @@ id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 2
 
 
 
-
-
-mip_problem = MixedIntegerProblem(id_subset, [6], [6])
-mip_problem.cost_limit = 6/v_scale
-
-
-
-solve!(mip_problem;
-    # self_cleaning = true,
-    include_intermediate_transfer_cost = true,
-    solutions_relative_allowance = 0.1,
-    solutions_count_maximum = 5
-)
-
-plot_graph(mip_problem)
 
 
 
