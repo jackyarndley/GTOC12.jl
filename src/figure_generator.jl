@@ -415,14 +415,14 @@ function plot_graph_structure(
 
     time_positions = vcat(
         [stage_Δx*(stage-1+0.5) for stage in 1:p.deployment_arcs[selection_index]],
-        [stage_Δx*3],
+        [stage_Δx*(p.deployment_arcs[selection_index] + 1)],
         [stage_Δx*(stage-1+1+0.5) for stage in (p.deployment_nums[selection_index] + 1):(p.deployment_nums[selection_index] + p.collection_arcs[selection_index])]
     )
 
     time_strings = vcat(
-        [latexstring("d_{i, j, $(v)}") for v in 1:2],
+        [latexstring("d_{i, j, $(v)}") for v in 1:p.deployment_arcs[selection_index]],
         [latexstring("m_{i, j}")],
-        [latexstring("c_{i, j, $(v)}") for v in 1:2],
+        [latexstring("c_{i, j, $(v)}") for v in 1:p.collection_arcs[selection_index]],
     )
 
     display(time_positions)
@@ -486,9 +486,7 @@ plot_graph_structure(
     output_file = "output/plots/bip_pruned.png"
 )
 
-
-
-plot_graph(
+plot_graph_structure(
     mip_problem;
     plot_pruned = true,
     plot_optimal_path = true,
@@ -498,11 +496,12 @@ plot_graph(
 
 
 
+
 id_subset = [3241, 15184, 19702, 46418, 53592]
 
 
 mip_problem = MixedIntegerProblem(id_subset, [3, 2], [2, 3])
-mip_problem.cost_limit = 8/v_scale
+mip_problem.cost_limit = 6/v_scale
 
 
 
@@ -510,27 +509,28 @@ solve!(mip_problem;
     # self_cleaning = true,
     include_intermediate_transfer_cost = true,
     solutions_relative_allowance = 0.1,
-    solutions_count_maximum = 1
+    solutions_count_maximum = 3
 )
 
 
-
-plot_graph(
+plot_graph_structure(
     mip_problem;
     plot_pruned = true,
     plot_optimal_path = true,
     output_file = "output/plots/bip_mixed_1.png",
-    selection_index = 1,
+    selection_index = 1
 )
 
-
-plot_graph(
+plot_graph_structure(
     mip_problem;
     plot_pruned = true,
     plot_optimal_path = true,
     output_file = "output/plots/bip_mixed_2.png",
-    selection_index = 2,
+    selection_index = 2
 )
+
+
+
 
 
 
