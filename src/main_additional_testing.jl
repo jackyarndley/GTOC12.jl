@@ -1,5 +1,3 @@
-
-
 include("header.jl")
 
 
@@ -18,6 +16,12 @@ custom_cartesian = [
     -172682023 176959469 7948912 -16.4274 -14.8605 9.2149e-2
 ]'
 
+# custom_cartesian = [
+#     -3.01166620e+07 -1.48851968e+08  1.86741232e+02 2.87120370e+01 -6.01882549e+00  7.55087690e-06
+#     -1.83865882e+06  2.34962319e+08  4.96736048e+06 -23.3085395 1.86654249 0.61187782
+# ]'
+
+
 custom_cartesian[1:3, :] ./= r_scale
 custom_cartesian[4:6, :] ./= v_scale
 
@@ -28,11 +32,21 @@ custom_classical = stack(cartesian_to_classical.(
 
 
 
+
+
+
+
+
+
+
+
 scp_iterations = 20
 
 node_time_spacing = 5.0*day_scale
 
 node_time_spacing = 348.79*day_scale/40
+# node_time_spacing = 689.5745203452379*day_scale/40
+# node_time_spacing = 689.5745203452379*day_scale/8
 
 
 
@@ -42,6 +56,7 @@ id_journey = [
 
 times_journey = [
     [0.0, 348.79*day_scale]
+    # [0.0, 689.5745203452379*day_scale]
 ]
 
 
@@ -54,12 +69,16 @@ p = SequentialConvexProblem(
     trust_region_factor = 0.01
 );
 
+
 plot_trajectory(p)
 
 solve!(p,
     MixedTimeAdaptive(); 
     adaptive_time = false
 )
+
+
+
 
 convert_logged_mass_to_mass!(p)
 

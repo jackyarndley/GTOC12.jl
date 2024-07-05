@@ -227,7 +227,7 @@ function initialize_scp_guess!(
                 objective_config = p.objective_config,
             )
 
-            m0 = mf + Δm0[n][k + 1]
+            m0 = mf + p.Δm0[n][k + 1]
         end
     end
 end
@@ -250,6 +250,7 @@ function initialize_scp_guess!(
                 # Prevent near 180 degree transfers
                 while norm(cross(p.x0[n][k][1:3], temp[1:3])) < 0.5
                     tof += 1*day_scale
+
                     temp = ephermeris_cartesian_from_id(
                         p.id_journey[n][k + 1], 
                         p.times_journey[n][k] + tof
@@ -408,10 +409,10 @@ function solve!(
 
         # Limit maximum mass at start
         if typeof(p.objective_config) == LoggedMassConfig
-            # @constraint(model, x[n][1][7, 1] == log(1000/m_scale))
+            # @constraint(model, x[n][1][7, 1] <= log(1000/m_scale))
             @constraint(model, x[n][1][7, 1] <= log(3000/m_scale))
         else
-            # @constraint(model, x[n][1][7, 1] == 1000/m_scale)
+            # @constraint(model, x[n][1][7, 1] <= 1000/m_scale)
             @constraint(model, x[n][1][7, 1] <= 3000.0/m_scale)
         end
     end
