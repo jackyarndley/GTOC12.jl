@@ -603,8 +603,8 @@ function solve!(
                 actual_time_con[n] = [
                     @constraint(model, actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
                     @constraint(model, actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale),
-                    @constraint(model, actual_time[n][end] == p.times_journey[n][end]),
-                    @constraint(model, actual_time[n][1] == p.times_journey[n][1]),
+                    # @constraint(model, actual_time[n][end] == p.times_journey[n][end]),
+                    # @constraint(model, actual_time[n][1] == p.times_journey[n][1]),
                 ]
             end
 

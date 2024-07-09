@@ -20,7 +20,7 @@ id_journey = [
 ]
 
 times_journey = [
-    convert_mjd_to_time([64428.0 65013.0 65258.0 65778.0 66013.0 66583.0][:]),
+    convert_mjd_to_time([64428.0 64913.0 65208.0 65648.0 66145.0 66550.0][:]),
 ]
 
 
@@ -38,7 +38,7 @@ p = SequentialConvexProblem(
     id_journey, 
     times_journey;
     objective_config = LoggedMassConfig(),
-    trust_region_factor = 0.05,
+    trust_region_factor = 0.02,
     mass_overhead = 1.0/m_scale
 );
 
@@ -50,7 +50,83 @@ solve!(p,
 
 
 
+
+
+
+
+
+plot_trajectory(p)
+
+
+
 plot_gtoc12_problem(p)
+
+
+plot_scp_details(p)
+
+
+plot_thrust_information(p)
+
+
+mjd_end = 69807
+
+
+
+id_subset = [3241, 15184, 19702, 46418, 53592]
+
+
+
+
+
+
+mip_problem = MixedIntegerProblem(id_subset, [3], [3])
+mip_problem.cost_limit = 6/v_scale
+
+solve!(mip_problem;
+    # self_cleaning = true,
+    include_intermediate_transfer_cost = true,
+    solutions_relative_allowance = 0.1,
+    solutions_count_maximum = 3
+)
+
+times_journey = mip_problem.times_journey
+id_journey = mip_problem.id_journey_solutions[1]
+
+
+
+p1 = SequentialConvexProblem(
+    id_journey, 
+    times_journey;
+    objective_config = LoggedMassConfig(),
+    trust_region_factor = 0.05,
+    mass_overhead = 1.0/m_scale
+);
+
+solve!(p1,
+    MixedTimeAdaptive(); 
+    adaptive_time = false
+)
+
+p2 = SequentialConvexProblem(
+    id_journey, 
+    times_journey;
+    objective_config = LoggedMassConfig(),
+    trust_region_factor = 0.05,
+    mass_overhead = 1.0/m_scale
+);
+
+solve!(p2,
+    MixedTimeAdaptive(); 
+    adaptive_time = true
+)
+
+plot_discretization_comparison(p1, p2; output_file = "output/plots/discretization_comparison.png")
+
+
+
+
+
+
 
 
 
@@ -62,13 +138,13 @@ function plot_gtoc12_problem(
 
     cs = ColorSchemes.tableau_10
 
-    f = Figure(size = (1200, 600), backgroundcolor = :white)
+    f = Figure(size = (1000, 480), backgroundcolor = :white)
 
     ax1 = Axis3(
         f[1, 1]; 
         # xlabel = "x [AU]", 
         # ylabel = "y [AU]", 
-        limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -1.0, 1.0),
+        limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -0.75, 0.75),
         azimuth = -π/2,
         elevation = π/10,
         aspect = (3, 3, 1)
@@ -95,7 +171,9 @@ function plot_gtoc12_problem(
                 temp[1, :],
                 temp[2, :],
                 temp[3, :],
-                linestyle = :dashdot,
+                # linestyle = :dashdot,
+                linestyle = :solid,
+                linewidth = 1,
                 color = cs[[2, 1, 3][i]],
                 label = ["Venus Orbit", "Earth Orbit", "Mars Orbit"][i]
             )
@@ -110,9 +188,10 @@ function plot_gtoc12_problem(
                 temp[1, :],
                 temp[2, :],
                 temp[3, :],
-                linestyle = :dashdot,
-                linewidth = 2,
-                alpha = 0.5,
+                linestyle = :solid,
+                # linestyle = :dashdot,
+                linewidth = 1,
+                alpha = 0.2,
                 color = :black,
                 label = "Asteroid Orbits"
             )
@@ -140,7 +219,8 @@ function plot_gtoc12_problem(
                     x_fine[2, :],
                     x_fine[3, :],
                     color = :black,
-                    alpha = 1.0,
+                    alpha = 0.5,
+                    linewidth = 2,
                     linestyle = :solid,
                     label = "Mining Ship\nTrajectory"
                 )
@@ -149,7 +229,8 @@ function plot_gtoc12_problem(
                     p.x0[n][k][1],
                     p.x0[n][k][2],
                     p.x0[n][k][3],
-                    color = :black
+                    color = :black,
+                    label = "Rendezvous\nEvent"
                 )
 
                 if k == p.segment_number[n]
@@ -162,12 +243,22 @@ function plot_gtoc12_problem(
                 end
 
                 text = [
-                    "Earth Departure",
+                    "",
                     "Asteroid 1\nDeployment",
                     "Asteroid 2\nDeployment",
                     "Asteroid 1\nCollection",
                     "Asteroid 2\nCollection",
-                    "Earth Arrival"
+                    ""
+                ]
+
+                
+                offsets = [
+                    (5, 0),
+                    (5, 0),
+                    (5, 0),
+                    (5, 0),
+                    (-5, 0),
+                    (-5, 0),
                 ]
 
                 alignment = [
@@ -175,7 +266,7 @@ function plot_gtoc12_problem(
                     (:left, :bottom),
                     (:left, :bottom),
                     (:left, :bottom),
-                    (:left, :top),
+                    (:right, :bottom),
                     (:right, :bottom)
                 ]
                 
@@ -186,7 +277,7 @@ function plot_gtoc12_problem(
                     text = text[k],
                     align = alignment[k],
                     # fontsize = 12,
-                    offset = (5, 0)
+                    offset = offsets[k]
                 )
 
                 if k == p.segment_number[n]
@@ -197,7 +288,7 @@ function plot_gtoc12_problem(
                         text = text[end],
                         align = alignment[end],
                         # fontsize = 12,
-                        offset = (-5, 0),
+                        offset = offsets[end],
                     )
                 end
 
@@ -208,9 +299,13 @@ function plot_gtoc12_problem(
         hidedecorations!(ax)
         hidespines!(ax)
 
-        axislegend(ax, unique = true, merge = true)
+        # axislegend(ax, unique = true, merge = true)
 
     end
+
+    
+    f[1, 2] = Legend(f, ax1, framevisible = false, unique = true, merge = true, labelsize=16)
+
 
     resize_to_layout!(f)
     display(f)
@@ -219,6 +314,261 @@ function plot_gtoc12_problem(
 
     return
 end
+
+
+
+
+function plot_scp_details(
+    p::SequentialConvexProblem
+)
+
+    cs = ColorSchemes.tableau_10
+    cs2 = ColorSchemes.tableau_10[[4, 5, 6, 7, 9]]
+    # cs2 = [:black, :black, :black, :black, :black]
+    # cs2 = ColorSchemes.Archambault
+
+    # f = Figure(size = (1000, 480), backgroundcolor = :white)
+    f = Figure(size = (1000, 680), backgroundcolor = :white)
+
+    ax1 = Axis(
+        f[1, 1]; 
+        # xlabel = "x [AU]", 
+        # ylabel = "y [AU]", 
+        limits = 1.05.*(-3.0, 3.0, -3.0, 3.0),
+        aspect = 1
+    )
+
+    # ax1 = Axis3(
+    #     f[1, 1]; 
+    #     # xlabel = "x [AU]", 
+    #     # ylabel = "y [AU]", 
+    #     limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -0.75, 0.75),
+    #     azimuth = -π/2,
+    #     elevation = π/10,
+    #     aspect = (3, 3, 1)
+    # )
+
+    scatter!(ax1,
+        [0.0],
+        [0.0],
+        color = cs[6],
+        markersize = 10,
+        label = "Sun"
+    )
+
+    for ax in [ax1]
+        ν_plot = collect(LinRange(0.0, 2π, 400)) 
+
+        for (i, planet_classical) in enumerate(eachcol(planets_classical))
+            temp = repeat(planet_classical, 1, 400)
+            temp[6, :] .= ν_plot
+            temp = hcat(classical_to_cartesian.(eachcol(temp))...)
+
+            lines!(ax,
+                temp[1, :],
+                temp[2, :],
+                temp[3, :],
+                linestyle = :solid,
+                linewidth = 1,
+                # linestyle = :dashdot,
+                color = cs[[2, 1, 3][i]],
+                label = ["Venus Orbit", "Earth Orbit", "Mars Orbit"][i]
+            )
+        end
+
+        for (i, asteroid_classical) in enumerate(eachcol(asteroids_classical[:, [15184, 12286]]))
+            temp = repeat(asteroid_classical, 1, 400)
+            temp[6, :] .= ν_plot
+            temp = hcat(classical_to_cartesian.(eachcol(temp))...)
+
+            lines!(ax,
+                temp[1, :],
+                temp[2, :],
+                temp[3, :],
+                linestyle = :solid,
+                # linestyle = :dashdot,
+                linewidth = 1,
+                alpha = 0.2,
+                color = :black,
+                label = "Asteroid Orbits"
+            )
+        end
+
+
+        for n in 1:p.mixing_number
+            for k in 1:p.segment_number[n]
+                t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
+
+                if !(t_fine[end] ≈ p.t_nodes[n][k][end])
+                    push!(t_fine, p.t_nodes[n][k][end])
+                end
+
+                x_fine = integrate_trajectory(
+                    p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+                    t_fine;
+                    t_nodes = p.t_nodes[n][k],
+                    u_nodes = p.u_nodes[n][k],
+                    p.objective_config,
+                )
+
+                scatter!(
+                    ax,
+                    p.x_nodes[n][k][1, :],
+                    p.x_nodes[n][k][2, :],
+                    p.x_nodes[n][k][3, :],
+                    color = cs2[k]
+                )
+
+                text = [
+                    "Leg 1",
+                    "Leg 2",
+                    "Leg 3",
+                    "Leg 4",
+                    "Leg 5",
+                ]
+                
+                lines!(ax,
+                    x_fine[1, :],
+                    x_fine[2, :],
+                    x_fine[3, :],
+                    # color = :black,
+                    color = cs2[k],
+                    alpha = 1.0,
+                    linestyle = :solid,
+                    linewidth = 2.0,
+                    label = text[k]
+                )
+
+
+                # text = [
+                #     "Earth",
+                #     "Asteroid 1",
+                #     "Asteroid 2",
+                #     "Asteroid 1",
+                #     "Asteroid 2",
+                #     "Earth"
+                # ]
+
+                # # alignment = [
+                # #     (:left, :bottom),
+                # #     (:left, :bottom),
+                # #     (:right, :top),
+                # #     (:left, :bottom),
+                # #     (:right, :bottom),
+                # #     (:right, :bottom)
+                # # ]
+
+                
+                # alignment = [
+                #     (:left, :bottom),
+                #     (:left, :bottom),
+                #     (:left, :bottom),
+                #     (:left, :bottom),
+                #     (:right, :bottom),
+                #     (:right, :bottom)
+                # ]
+
+                # # offsets = [
+                # #     (5, 0),
+                # #     (5, 0),
+                # #     (-5, 0),
+                # #     (5, 0),
+                # #     (-5, 0),
+                # #     (-5, 0),
+                # # ]
+
+                # offsets = [
+                #     (5, 0),
+                #     (5, 0),
+                #     (5, 0),
+                #     (5, 0),
+                #     (-5, 0),
+                #     (-5, 0),
+                # ]
+                
+                # text!(ax, 
+                #     p.x0[n][k][1],
+                #     p.x0[n][k][2],
+                #     p.x0[n][k][3],
+                #     text = text[k],
+                #     align = alignment[k],
+                #     # fontsize = 12,
+                #     offset = offsets[k]
+                # )
+
+                # if k == p.segment_number[n]
+                #     text!(ax, 
+                #         p.xf[n][k][1],
+                #         p.xf[n][k][2],
+                #         p.xf[n][k][3],
+                #         text = text[end],
+                #         align = alignment[end],
+                #         # fontsize = 12,
+                #         offset = offsets[end],
+                #     )
+                # end
+
+                # temp = Int64(round(size(p.x_nodes[n][k], 2) *0.7))
+
+                # text = [
+                #     "Leg 1\nEarth->Asteroid 1",
+                #     "Leg 2\nAsteroid 1->Asteroid 2",
+                #     "Leg 3\nAsteroid 2->Asteroid 1",
+                #     "Leg 4\nAsteroid 1->Asteroid 2",
+                #     "Leg 5\nAsteroid 2->Earth",
+                # ]
+
+
+                # text!(ax,
+                #     p.x_nodes[n][k][1, temp],
+                #     p.x_nodes[n][k][2, temp],
+                #     text = text[k]
+                # )
+
+
+
+            end
+
+            for k in 1:p.segment_number[n]
+                scatter!(ax,
+                    p.x0[n][k][1],
+                    p.x0[n][k][2],
+                    p.x0[n][k][3],
+                    color = :black,
+                    label = "Rendezvous\nEvent"
+                )
+
+                if k == p.segment_number[n]
+                    scatter!(ax,
+                        p.xf[n][k][1],
+                        p.xf[n][k][2],
+                        p.xf[n][k][3],
+                        color = :black,
+                        label = "Rendezvous\nEvent"
+                    )
+                end
+            end
+        end
+
+
+        hidedecorations!(ax)
+        hidespines!(ax)
+
+        # axislegend(ax, unique = true, merge = true)
+
+    end
+
+    f[1, 2] = Legend(f, ax1, framevisible = false, unique = true, merge = true, labelsize=16)
+
+    resize_to_layout!(f)
+    display(f)
+
+    save("output/plots/gtoc12_scp_explainer.png", f)
+
+    return
+end
+
+
 
 
 
@@ -455,11 +805,114 @@ end
 
 
 
+function plot_discretization_comparison(
+    p1::SequentialConvexProblem,
+    p2::SequentialConvexProblem;
+    output_file = nothing
+)
+    f = Figure(size = (1000, 500), backgroundcolor = :white)
+    axs = []
+
+    for (i, p) in enumerate([p1, p2])
+        mixing = length(p.x0)
+        
+        n = 1
+
+        t_nodes_combined = vcat(
+            [p.t_nodes[n][k][1:end-1] .+ p.times_journey[n][k] for k in 1:length(p.x0[n])]...
+        )
+        u_nodes_combined = hcat(p.u_nodes[n]...)
+        x_nodes_combined = hcat([val[:, 1:end-1] for val in p.x_nodes[n]]...)
+
+        push!(t_nodes_combined, p.times_journey[end][end])
+        u_nodes_combined = hcat(u_nodes_combined, p.u_nodes[end][end][:, end])
+        x_nodes_combined = hcat(x_nodes_combined, p.x_nodes[end][end][:, end])
+
+        thrust_force = if p.objective_config == LoggedMassConfig()
+            temp = exp.(x_nodes_combined[7, :])
+            u_nodes_combined[4, :] .* temp * thrust * m_scale * a_scale * 1e3
+        else
+            u_nodes_combined[4, :] * thrust * m_scale * a_scale * 1e3
+        end
+        
+        ax = Axis(
+            f[i, 1]; 
+            xlabel = i == 2 ? "time " : "", 
+            xticksvisible = false,
+            xticklabelsvisible = false,
+            ylabel = "thrust", 
+            # xticks = [65000, 66000, 67000, 68000, 69000],
+            yticks = ([0.0, 0.6], ["0.0", "max"]),
+            xgridvisible = false,
+            limits = (mjd_start, 65500, -0.05, 0.65)
+        )
+
+        push!(axs, ax)
+
+        vlines!(
+            ax,
+            convert_time_to_mjd(p.times_journey[n])
+        )
+
+        vlines!(
+            ax,
+            convert_time_to_mjd(t_nodes_combined),
+            color = :black,
+            alpha = 0.1,
+
+        )
+
+
+
+        # plot_location_vertical_markers(
+        #     ax, 
+        #     convert_time_to_mjd(p.times_journey[n]), 
+        #     p.id_journey[n], 
+        #     p.Δm0[n]; 
+        #     vertical_position = 1.05*maximum(thrust_force)
+        # )
+
+        stairs!(
+            ax, 
+            convert_time_to_mjd(t_nodes_combined), 
+            thrust_force;
+            step = :post,
+            color = :black,
+            linewidth = 1.5,
+        )
+    end
+
+    linkxaxes!(axs...)
+    resize_to_layout!(f)
+    display(f)
+
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
+    return
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 id_subset = [3241, 15184, 19702, 46418, 53592]
 
 
 mip_problem = MixedIntegerProblem(id_subset, [3], [3])
+
+
 mip_problem.cost_limit = 6/v_scale
 
 
@@ -561,8 +1014,8 @@ solve!(mip_problem;
 
 
 scp_problem = SequentialConvexProblem(
-    [mip_problem.id_journey_solutions[k][1] for k in 1:20], 
-    [mip_problem.times_journey[1] for k in 1:20];
+    [mip_problem.id_journey_solutions[k][1] for k in 1:min(20, mip_problem.solutions)], 
+    [mip_problem.times_journey[1] for k in 1:min(20, mip_problem.solutions)];
     objective_config = LoggedMassConfig(),
     trust_region_factor = 0.025,
     mass_overhead = 1.0/m_scale
@@ -581,10 +1034,10 @@ solve!(scp_problem,
 
 
 mip_problem = MixedIntegerProblem(id_subset, [10], [10];
-    times_journey = [scp_problem.times_journey[20]]
+    times_journey = [scp_problem.times_journey[1]]
 )
 
-mip_problem.cost_limit = 8/v_scale
+mip_problem.cost_limit = 9/v_scale
 
 
 
@@ -628,7 +1081,7 @@ asteroids_join_check = ephemeris_cartesian_at(asteroids_classical, times_join_ch
 
 
 
-while length(id_subset) < 50
+while length(id_subset) < 30
     print("\n$(length(id_subset)) ID $(id_subset[end])")
 
     temp = []

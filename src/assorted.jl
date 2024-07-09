@@ -107,14 +107,31 @@ function find_best_lambert_transfer(
     while n_revolutions < 1
         best_dv = current_dv
 
-        transfer = multi_revolution_lambert(
+        transfer1 = multi_revolution_lambert(
             x0,
             xf,
             tof,
             n_revolutions
         )
 
-        current_dv = norm(transfer[1] - x0[4:6, :]) + norm(xf[4:6, :] - transfer[2])
+        transfer2 = multi_revolution_lambert(
+            x0,
+            xf,
+            tof,
+            n_revolutions;
+            is_retrograde = true
+        )
+
+        current_dv1 = norm(transfer1[1] - x0[4:6, :]) + norm(xf[4:6, :] - transfer1[2])
+        current_dv2 = norm(transfer2[1] - x0[4:6, :]) + norm(xf[4:6, :] - transfer2[2])
+
+        if current_dv1 < 0.8*current_dv2
+            transfer = transfer1
+        else
+            transfer = transfer2
+        end
+
+        current_dv = min(current_dv1, current_dv2)
 
         if current_dv > best_dv
             break

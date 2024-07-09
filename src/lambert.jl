@@ -2,7 +2,7 @@ function zero_revolution_lambert(r1, r2, tof)
     return multi_revolution_lambert(r1, r2, tof, 0)
 end
 
-function multi_revolution_lambert(r1, r2, tof, n_revolutions)
+function multi_revolution_lambert(r1, r2, tof, n_revolutions; is_retrograde=false)
     v1 = copy(r1[1:3, :])
     v2 = copy(r2[1:3, :])
 
@@ -19,7 +19,7 @@ function multi_revolution_lambert(r1, r2, tof, n_revolutions)
             n_revolutions
         end
 
-        temp = lambert_problem(r1[1:3, i], r2[1:3, i], tof_i[1], μ, n_rev_i[1])
+        temp = lambert_problem(r1[1:3, i], r2[1:3, i], tof_i[1], μ, n_rev_i[1]; is_retrograde)
 
         v1[:, i] = temp[1][:]
         v2[:, i] = temp[2][:]
