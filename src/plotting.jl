@@ -56,14 +56,21 @@ function plot_location_vertical_markers(
 end
 
 
-function plot_thrust_information(p::SequentialConvexProblem)
+function plot_thrust_information(
+    p::SequentialConvexProblem;
+    solution_indices = nothing
+)
     mixing = length(p.x0)
 
-    f = Figure(size = (800, 250*mixing), backgroundcolor = :white)
+    if isnothing(solution_indices)
+        solution_indices = collect(1:mixing)
+    end
+    
+    f = Figure(size = (800, 250*length(solution_indices)), backgroundcolor = :white)
 
     axs = []
 
-    for n in 1:mixing
+    for (i, n) in enumerate(solution_indices)
         t_nodes_combined = vcat(
             [p.t_nodes[n][k][1:end-1] .+ p.times_journey[n][k] for k in 1:length(p.x0[n])]...
         )
@@ -82,8 +89,8 @@ function plot_thrust_information(p::SequentialConvexProblem)
         end
         
         ax = Axis(
-            f[n, 1]; 
-            xlabel = n == mixing ? "t [MJD]" : "", 
+            f[i, 1]; 
+            xlabel = n == solution_indices[end] ? "t [MJD]" : "", 
             ylabel = "thrust [N]", 
             # xticks = [65000, 66000, 67000, 68000, 69000],
             yticks = [0.0, 0.6],
@@ -123,8 +130,14 @@ end
 function plot_trajectory(
     p::SequentialConvexProblem;
     plot_3d = false,
+    solution_indices = nothing,
+    rotating = false
 )
     f = Figure(size = (900, 800), backgroundcolor = :white)
+
+    if isnothing(solution_indices)
+        solution_indices = collect(1:mixing)
+    end
 
     ax1 = if plot_3d
         Axis3(
@@ -142,8 +155,21 @@ function plot_trajectory(
             xlabel = "x [AU]", 
             ylabel = "y [AU]", 
             limits = (-3.0, 3.0, -3.0, 3.0),
+            # limits = (0.5, 1.5, -3.0, -2.0),
             aspect = 1
         )
+    end
+
+    rotation_rate = if rotating
+        visited_ids = setdiff(unique(stack(p.id_journey[solution_indices])), [0, -3])
+
+        a_visited = asteroids_classical[1, visited_ids]
+
+        period_visited = 2π * sqrt.(a_visited.^3/μ)
+
+        mean(period_visited)
+    else
+        0.0
     end
 
     # scatter!(ax1,
@@ -169,7 +195,7 @@ function plot_trajectory(
         )
     end
 
-    for n in 1:p.mixing_number
+    for n in solution_indices
         for k in 1:p.segment_number[n]
 
             scatter!(ax1,
@@ -199,6 +225,12 @@ function plot_trajectory(
                 u_nodes = p.u_nodes[n][k],
                 p.objective_config,
             )
+
+            if rotating
+                rotation_matrix = get_state_rotation_matrix.(2π*(t_fine .+ p.times_journey[n][k])/rotation_rate)
+
+                x_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_fine[1:6, :]))
+            end
 
             lines!(ax1,
                 x_fine[1, :],

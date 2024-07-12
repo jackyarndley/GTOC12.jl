@@ -43,8 +43,8 @@ function MixedIntegerProblem(
             id_subset;
             algorithm = 3,
             # time_parameter_days = 135
-            # time_parameter_days = 145
-            time_parameter_days = 175
+            time_parameter_days = 145
+            # time_parameter_days = 175
         )
 
         times_journey = [

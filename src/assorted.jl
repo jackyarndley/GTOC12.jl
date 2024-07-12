@@ -1720,3 +1720,18 @@ function get_gravity_assist_callback(
 
     return CallbackSet(callbacks...)
 end
+
+function get_state_rotation_matrix(
+    θ
+)
+    sin_θ, cos_θ = sincos(θ)
+    
+    return [
+        cos_θ sin_θ 0.0 0.0 0.0 0.0
+        -sin_θ cos_θ 0.0 0.0 0.0 0.0
+        0.0 0.0 1.0 0.0 0.0 0.0
+        0.0 0.0 0.0 cos_θ sin_θ 0.0
+        0.0 0.0 0.0 -sin_θ cos_θ 0.0
+        0.0 0.0 0.0 0.0 0.0 1.0
+    ]
+end

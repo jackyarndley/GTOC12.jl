@@ -1052,11 +1052,20 @@ id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 2
 
 
 
+id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
 
 
 
 mip_problem = MixedIntegerProblem(id_subset, [10], [10])
 mip_problem.cost_limit = 8/v_scale
+
+
+join([@sprintf("%5s ", val) for val in id_subset])
+
+join([@sprintf("%5i ", val) for val in convert_time_to_mjd.(mip_problem.times_journey[1])])
+
+
+join([@sprintf("%5s ", val) for val in mip_problem.id_journey_solutions[5][1]])
 
 
 
@@ -1065,7 +1074,7 @@ solve!(mip_problem;
     # self_cleaning = true,
     include_intermediate_transfer_cost = true,
     solutions_relative_allowance = 0.1,
-    solutions_count_maximum = 40,
+    solutions_count_maximum = 10,
     time_limit_seconds = 300
 )
 
@@ -1081,22 +1090,16 @@ scp_problem = SequentialConvexProblem(
 );
 
 
-solve!(scp_problem,
-    MixedTimeAdaptive(); 
-    adaptive_time = true
-)
+solve!(scp_problem)
 
 
 
 
-
-
-
-mip_problem = MixedIntegerProblem(id_subset, [10], [10];
+mip_problem = MixedIntegerProblem(id_subset, [7], [7];
     times_journey = [scp_problem.times_journey[1]]
 )
 
-mip_problem.cost_limit = 9/v_scale
+mip_problem.cost_limit = 15/v_scale
 
 
 
@@ -1105,11 +1108,76 @@ solve!(mip_problem;
     # self_cleaning = true,
     include_intermediate_transfer_cost = true,
     solutions_relative_allowance = 0.1,
-    solutions_count_maximum = 80
+    solutions_count_maximum = 10
 )
 
 
 
+plot_thrust_information(scp_problem; solution_indices = [1])
+
+plot_trajectory(scp_problem; solution_indices = [1], plot_3d = false, rotating = true)
+
+
+
+
+
+
+
+
+# times_5day = collect(0:5*day_scale:maximum_time)
+# asteroids_cartesian_5day = ephemeris_cartesian_at(asteroids_classical, times_5day)
+
+
+
+# check_times_deploy = collect(convert_mjd_to_5day_time(64900):20:convert_mjd_to_5day_time(66500))
+# check_times_collect = collect(convert_mjd_to_5day_time(68200):20:convert_mjd_to_5day_time(69000))
+
+
+# times_join_check = collect(convert_mjd_to_time(65000):100*day_scale:convert_mjd_to_time(69000))
+# asteroids_join_check = ephemeris_cartesian_at(asteroids_classical, times_join_check)
+
+
+
+
+
+
+
+
+
+# while length(id_subset) < 30
+#     print("Size: \n$(length(id_subset)), last ID: $(id_subset[end])")
+
+#     temp = []
+
+#     for id in id_subset
+#         temp10 = all_ids[[minimum(norm.(eachcol(a .- asteroids_join_check[1:3, id, :]))) for a in eachslice(asteroids_join_check[1:3, :, :], dims=2)] .<= 0.05]
+
+#         temp = unique(vcat(temp, temp10))
+#     end
+
+#     temp = setdiff(temp, id_subset)
+#     # temp = setdiff(temp, used_ids)
+
+#     print(", near asteroids: $(length(temp))")
+
+#     average_minimum_dv = fill(0.0, length(temp))
+#     # average_minimum_dv = fill(1000.0, length(temp))
+
+#     for id in id_subset
+#         transfer_dvs_deploy = [v_scale.*get_lambert_phase(id, i, check_times_deploy) for i in temp]
+#         transfer_dvs_collect = [v_scale.*get_lambert_phase(id, i, check_times_collect) for i in temp]
+
+#         average_minimum_dv .+= sum.(transfer_dvs_deploy)./length(check_times_deploy) .+ sum.(transfer_dvs_collect)./length(check_times_collect)
+#         # average_minimum_dv .+= minimum.(transfer_dvs_deploy) .+ minimum.(transfer_dvs_collect)
+#         # average_minimum_dv = min.(average_minimum_dv, minimum.(transfer_dvs_deploy) .+ minimum.(transfer_dvs_collect))
+#     end
+
+#     minimum_id = temp[argmin(average_minimum_dv)]
+
+#     print(", lowest Δv = $(minimum(average_minimum_dv))")
+
+#     push!(id_subset, minimum_id)
+# end
 
 
 
@@ -1120,60 +1188,6 @@ solve!(mip_problem;
 
 
 
-times_5day = collect(0:5*day_scale:maximum_time)
-asteroids_cartesian_5day = ephemeris_cartesian_at(asteroids_classical, times_5day)
-
-
-
-check_times_deploy = collect(convert_mjd_to_5day_time(64900):20:convert_mjd_to_5day_time(66500))
-check_times_collect = collect(convert_mjd_to_5day_time(68200):20:convert_mjd_to_5day_time(69000))
-
-
-times_join_check = collect(convert_mjd_to_time(65000):100*day_scale:convert_mjd_to_time(69000))
-asteroids_join_check = ephemeris_cartesian_at(asteroids_classical, times_join_check)
-
-
-
-
-
-
-
-
-
-while length(id_subset) < 30
-    print("\n$(length(id_subset)) ID $(id_subset[end])")
-
-    temp = []
-
-    for id in id_subset
-        temp10 = all_ids[[minimum(norm.(eachcol(a .- asteroids_join_check[1:3, id, :]))) for a in eachslice(asteroids_join_check[1:3, :, :], dims=2)] .<= 0.1]
-
-        temp = unique(vcat(temp, temp10))
-    end
-
-    temp = setdiff(temp, id_subset)
-    # temp = setdiff(temp, used_ids)
-
-    print(", near asteroids = $(length(temp))")
-
-    average_minimum_dv = fill(0.0, length(temp))
-    # average_minimum_dv = fill(1000.0, length(temp))
-
-    for id in id_subset
-        transfer_dvs_deploy = [v_scale.*get_lambert_phase(id, i, check_times_deploy) for i in temp]
-        transfer_dvs_collect = [v_scale.*get_lambert_phase(id, i, check_times_collect) for i in temp]
-
-        average_minimum_dv .+= sum.(transfer_dvs_deploy)./length(check_times_deploy) .+ sum.(transfer_dvs_collect)./length(check_times_collect)
-        # average_minimum_dv .+= minimum.(transfer_dvs_deploy) .+ minimum.(transfer_dvs_collect)
-        # average_minimum_dv = min.(average_minimum_dv, minimum.(transfer_dvs_deploy) .+ minimum.(transfer_dvs_collect))
-    end
-
-    minimum_id = temp[argmin(average_minimum_dv)]
-
-    print(", lowest Δv = $(minimum(average_minimum_dv))")
-
-    push!(id_subset, minimum_id)
-end
 
 
 
