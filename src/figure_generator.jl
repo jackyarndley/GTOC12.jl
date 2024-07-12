@@ -26,7 +26,7 @@ times_journey = [
 
 
 
-scp_iterations = 80
+scp_iterations = 40
 
 node_time_spacing = 20.0*day_scale
 
@@ -42,10 +42,7 @@ p = SequentialConvexProblem(
     mass_overhead = 1.0/m_scale
 );
 
-solve!(p,
-    MixedTimeAdaptive(); 
-    adaptive_time = true
-)
+solve!(p)
 
 
 
@@ -102,12 +99,25 @@ p1 = SequentialConvexProblem(
     mass_overhead = 1.0/m_scale
 );
 
-solve!(p1,
-    MixedTimeAdaptive(); 
-    adaptive_time = false
+solve!(p1; 
+    fixed_segments = true,
+    fixed_rendezvous = true
 )
 
 p2 = SequentialConvexProblem(
+    id_journey, 
+    times_journey;
+    objective_config = LoggedMassConfig(),
+    trust_region_factor = 0.025,
+    mass_overhead = 1.0/m_scale
+);
+
+solve!(p2; 
+    fixed_segments = false,
+    fixed_rendezvous = true
+)
+
+p3 = SequentialConvexProblem(
     id_journey, 
     times_journey;
     objective_config = LoggedMassConfig(),
@@ -115,12 +125,15 @@ p2 = SequentialConvexProblem(
     mass_overhead = 1.0/m_scale
 );
 
-solve!(p2,
-    MixedTimeAdaptive(); 
-    adaptive_time = true
+solve!(p3; 
+    fixed_segments = false,
+    fixed_rendezvous = false
 )
 
-plot_discretization_comparison(p1, p2; output_file = "output/plots/discretization_comparison.png")
+
+
+
+plot_discretization_comparison(p1, p2, p3; output_file = "output/plots/discretization_comparison.png")
 
 
 
@@ -327,26 +340,26 @@ function plot_scp_details(
     # cs2 = [:black, :black, :black, :black, :black]
     # cs2 = ColorSchemes.Archambault
 
-    # f = Figure(size = (1000, 480), backgroundcolor = :white)
-    f = Figure(size = (1000, 680), backgroundcolor = :white)
+    f = Figure(size = (1000, 480), backgroundcolor = :white)
+    # f = Figure(size = (1000, 680), backgroundcolor = :white)
 
-    ax1 = Axis(
-        f[1, 1]; 
-        # xlabel = "x [AU]", 
-        # ylabel = "y [AU]", 
-        limits = 1.05.*(-3.0, 3.0, -3.0, 3.0),
-        aspect = 1
-    )
-
-    # ax1 = Axis3(
+    # ax1 = Axis(
     #     f[1, 1]; 
     #     # xlabel = "x [AU]", 
     #     # ylabel = "y [AU]", 
-    #     limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -0.75, 0.75),
-    #     azimuth = -π/2,
-    #     elevation = π/10,
-    #     aspect = (3, 3, 1)
+    #     limits = 1.05.*(-3.0, 3.0, -3.0, 3.0),
+    #     aspect = 1
     # )
+
+    ax1 = Axis3(
+        f[1, 1]; 
+        # xlabel = "x [AU]", 
+        # ylabel = "y [AU]", 
+        limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -0.75, 0.75),
+        azimuth = -π/2,
+        elevation = π/10,
+        aspect = (3, 3, 1)
+    )
 
     scatter!(ax1,
         [0.0],
@@ -807,16 +820,29 @@ end
 
 function plot_discretization_comparison(
     p1::SequentialConvexProblem,
-    p2::SequentialConvexProblem;
+    p2::SequentialConvexProblem,
+    p3::SequentialConvexProblem;
     output_file = nothing
 )
-    f = Figure(size = (1000, 500), backgroundcolor = :white)
+    f = Figure(size = (800, 400), backgroundcolor = :white)
     axs = []
 
-    for (i, p) in enumerate([p1, p2])
+    cs = ColorSchemes.tableau_10
+
+    for (i, p) in enumerate([p1, p2, p3])
         mixing = length(p.x0)
         
         n = 1
+
+        deployments = sum(p.Δm0[n] .≈ -40/m_scale)
+
+        m_fuel = if typeof(p.objective_config) == LoggedMassConfig
+            m_scale*exp(p.x_nodes[n][1][7, 1]) - 500.0 - 40.0*deployments - (m_scale*exp(p.x_nodes[n][end][7, end]) - 500.0 + m_scale*p.Δm0[n][end])
+        else
+            m_scale*p.x_nodes[n][1][7, 1] - 500.0 - 40.0*deployments - (m_scale*p.x_nodes[n][end][7, end] - 500.0 + m_scale*p.Δm0[n][end])
+        end
+
+        m_returned = -m_scale*p.Δm0[n][end]
 
         t_nodes_combined = vcat(
             [p.t_nodes[n][k][1:end-1] .+ p.times_journey[n][k] for k in 1:length(p.x0[n])]...
@@ -837,32 +863,56 @@ function plot_discretization_comparison(
         
         ax = Axis(
             f[i, 1]; 
-            xlabel = i == 2 ? "time " : "", 
+            xlabel = i == 3 ? "time " : "", 
             xticksvisible = false,
             xticklabelsvisible = false,
             ylabel = "thrust", 
             # xticks = [65000, 66000, 67000, 68000, 69000],
             yticks = ([0.0, 0.6], ["0.0", "max"]),
             xgridvisible = false,
-            limits = (mjd_start, 65500, -0.05, 0.65)
+            limits = (mjd_start, 65420, -0.05, 0.65)
         )
 
         push!(axs, ax)
 
         vlines!(
             ax,
-            convert_time_to_mjd(p.times_journey[n])
-        )
-
-        vlines!(
-            ax,
             convert_time_to_mjd(t_nodes_combined),
             color = :black,
             alpha = 0.1,
+        )
 
+        text1 = [
+            "Fixed Time",
+            "Fixed Time",
+            "Dynamic Time",
+        ]
+
+        text2 = [
+            "Fixed Discretization",
+            "Dynamic Discretization",
+            "Dynamic Discretization",
+        ]
+
+        text = "$(text1[i])\n$(text2[i])\n"
+
+        Label(
+            f[i, 1, Right()], 
+            @sprintf("%s\n%s\n%.2f kg fuel\n%.2f kg mined", text1[i], text2[i], m_fuel, m_returned), 
+            # font = :italic, 
+            width = 150,
+            justification = :left,
+            padding = (10, 0, 0, 0)
         )
 
 
+    # text!(ax, 
+    #     time_positions,
+    #     fill(0.7*node_Δy, length(time_positions)),
+    #     text = time_strings,
+    #     align = (:center, :center),
+    #     fontsize = 20,
+    # )
 
         # plot_location_vertical_markers(
         #     ax, 
@@ -879,6 +929,15 @@ function plot_discretization_comparison(
             step = :post,
             color = :black,
             linewidth = 1.5,
+        )
+
+        
+        vlines!(
+            ax,
+            convert_time_to_mjd(p.times_journey[n][1:4]),
+            color = cs[[1, 3, 3, 3]],
+            linewidth = 2,
+            alpha = 0.8
         )
     end
 
@@ -1118,9 +1177,159 @@ end
 
 
 
+plot_team_improvements(
+    [
+        "data/bundled/submitted/JPL.txt",
+        "data/bundled/submitted/BIT.txt",
+        "data/bundled/submitted/OptimiCS.txt",
+        "data/bundled/submitted/ESA.txt",
+        "data/bundled/submitted/TheAntipodes.txt",
+        "data/bundled/submitted/NUDT.txt",
+        "data/bundled/submitted/SIGMA.txt",
+        "data/bundled/submitted/ATQ.txt",
+        "data/bundled/submitted/ADL.txt",
+        "data/bundled/submitted/NUAA.txt",
+    ],
+    [
+        "data/bundled/reoptimized/JPL"
+        "data/bundled/reoptimized/BIT"
+        "data/bundled/reoptimized/OptimiCS"
+        "data/bundled/reoptimized/ESA"
+        "data/bundled/reoptimized/TheAntipodes"
+        "data/bundled/reoptimized/NUDT"
+        "data/bundled/reoptimized/SIGMA"
+        "data/bundled/reoptimized/ATQ"
+        "data/bundled/reoptimized/ADL"
+        "data/bundled/reoptimized/NUAA"
+
+    ],
+    [
+        "JPL",
+        "BIT-CAS-DFH",
+        "OptimiCS",
+        "ESA ACT\n& Friends",
+        "TheAntipodes",
+        "NUDT-LIPSAM",
+        "∑ TEAM",
+        "ATQ",
+        "ADL",
+        "NUAA-ASTL",
+    ];
+    output_file = "output/plots/top10_convex.png"
+)
 
 
 
+
+
+
+
+
+
+
+
+function plot_team_improvements(
+    submitted_files,
+    reoptimized_files,
+    team_names;
+    output_file = nothing
+)
+    f = Figure(size = (800, 400), backgroundcolor = :white)
+    axs = []
+
+    cs = ColorSchemes.tableau_10
+
+    ax = Axis(
+        f[1, 1]; 
+        xlabel = "improved per ship mass [kg]", 
+        # yticklabelsize = 10,
+        # xticksvisible = false,
+        # xticklabelsvisible = false,
+        # yticksvisible = false,
+        # yticklabelsvisible = false,
+        # ylabel = "thrust", 
+        # xticks = [65000, 66000, 67000, 68000, 69000],
+        # yticks = ([0.0, 0.6], ["0.0", "max"]),
+        xgridvisible = false,
+        ygridvisible = false,
+        yaxisposition = :left,
+        yticks = (collect(1:length(submitted_files)), team_names),
+        # limits = (mjd_start, 65420, -0.05, 0.65)
+    )
+
+
+
+    for (i, (submitted_file, reoptimized_file)) in enumerate(zip(submitted_files, reoptimized_files))
+
+        id_journey_submitted, times_journey_submitted, mined_mass_submitted, penalised_mass_submitted, groups_submitted, result_files_submitted = load_result_folders_grouping([submitted_file])
+
+        id_journey_reoptimized, times_journey_reoptimized, mined_mass_reoptimized, penalised_mass_reoptimized, groups_reoptimized, result_files_reoptimized = load_result_folders_grouping([reoptimized_file])
+
+        total_improved = 0.0
+
+        y_position = i
+
+        improved_mass = zeros(length(id_journey_submitted))
+        colors = zeros(Int64, length(id_journey_submitted))
+
+        for (i, id_journey) in enumerate(id_journey_submitted)
+            k = findfirst(==(id_journey), id_journey_reoptimized)
+
+            improved_mass[i] = mined_mass_reoptimized[k] - mined_mass_submitted[i]
+            
+            colors[i] = if length(findall(==(groups_submitted[i]), groups_submitted)) == 1
+                1
+            else
+                2
+            end
+        end
+
+        rangebars!(ax, 
+            [i], 
+            minimum(improved_mass), 
+            maximum(improved_mass), 
+            color = :black,
+            whiskerwidth = 15, 
+            direction = :x
+        )
+
+        total_improved = mean(improved_mass)
+
+        lines!(ax,
+            [total_improved, total_improved], 
+            [y_position-0.35, y_position+0.35],
+            color=:black,
+            alpha=0.75,
+            linewidth=2,
+            label=false
+        )
+
+        for (mass, color) in zip(improved_mass, colors)
+            lines!(ax,
+                [mass, mass], 
+                [y_position-0.18, y_position+0.18],
+                color=cs[color],
+                alpha=0.75,
+                linewidth=2,
+                label=false
+            )
+        end
+
+        push!(axs, ax)
+    end
+
+    linkxaxes!(axs...)
+    resize_to_layout!(f)
+    display(f)
+
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
+    return
+
+
+end
 
 
 

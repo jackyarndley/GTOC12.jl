@@ -1,10 +1,3 @@
-abstract type SequentialConvexAlgorithm end
-
-struct SegmentedTimeFixed <: SequentialConvexAlgorithm end
-struct UnifiedTimeFixed <: SequentialConvexAlgorithm end
-struct MixedTimeAdaptive <: SequentialConvexAlgorithm end
-
-
 abstract type SequentialConvexGuess end
 
 struct BallisticGuess <: SequentialConvexGuess end 
@@ -333,15 +326,19 @@ end
 
 
 function solve!(
-    p::SequentialConvexProblem, 
-    ::MixedTimeAdaptive;
-    adaptive_time = true
+    p::SequentialConvexProblem;
+    fixed_segments = false,
+    fixed_rendezvous = false,
 )
+    if fixed_segments && !fixed_rendezvous
+        error("Must have non-fixed segments for adaptive rendezvous")
+    end
+
     mixing = length(p.t_nodes)
 
     model = Model(p.optimizer)
     set_silent(model)
-    set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-10)
+    set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-8)
 
     # State variables
     x = [[] for _ in 1:mixing]
@@ -398,12 +395,12 @@ function solve!(
             @constraint(model, x_violation[n][k] .>= Δxf[n][k])
             @constraint(model, x_violation[n][k] .>= -Δxf[n][k])
 
-            if !adaptive_time
+            if fixed_segments
                 @constraint(model, s[n][k] .== 1.0)
             end
         end
 
-        if !adaptive_time
+        if fixed_segments || fixed_rendezvous
             @constraint(model, Δt_start[n] .== 0.0)
         end
 
@@ -562,6 +559,23 @@ function solve!(
                 end
             end
 
+            # # Mass linkage constraints
+            # for k in bad_mass_link_segments[n]
+            #     for con in mass_link_con[n][k]
+            #         delete(model, con)
+            #     end
+
+            #     mass_link_con[n][k] = if typeof(p.objective_config) == LoggedMassConfig 
+            #         [@constraint(model,
+            #             x[n][k][7, 1] == log(exp(p.x_nodes[n][k-1][7, end]) + p.Δm0[n][k]) + (1.0/(1.0 + p.Δm0[n][k]/exp(p.x_nodes[n][k-1][7, end])))*(x[n][k-1][7, end] - p.x_nodes[n][k-1][7, end])
+            #         )]
+            #     else
+            #         [@constraint(model,
+            #             x[n][k][7, 1] == x[n][k-1][7, end] + p.Δm0[n][k]
+            #         )]
+            #     end
+            # end
+
             # Mass linkage constraints
             for k in bad_mass_link_segments[n]
                 for con in mass_link_con[n][k]
@@ -573,6 +587,7 @@ function solve!(
                         x[n][k][7, 1] == log(exp(p.x_nodes[n][k-1][7, end]) + p.Δm0[n][k]) + (1.0/(1.0 + p.Δm0[n][k]/exp(p.x_nodes[n][k-1][7, end])))*(x[n][k-1][7, end] - p.x_nodes[n][k-1][7, end])
                     )]
                 else
+                    
                     [@constraint(model,
                         x[n][k][7, 1] == x[n][k-1][7, end] + p.Δm0[n][k]
                     )]
@@ -589,29 +604,31 @@ function solve!(
                 [@constraint(model, x[n][end][7, end] + m_violation[n] >= 500/m_scale + p.mass_overhead - p.Δm0[n][end])]
             end
 
-            if adaptive_time
+            for con in actual_time_con[n]
+                delete(model, con)
+            end
+
+            if !fixed_rendezvous
                 for con in time_start_movement_con[n]
                     delete(model, con)
                 end
 
                 time_start_movement_con[n] = [@constraint(model, -2e-1*current_trust_region_factor <= Δt_start[n] <= 2e-1*current_trust_region_factor)]
-                
-                for con in actual_time_con[n]
-                    delete(model, con)
-                end
 
                 actual_time_con[n] = [
                     @constraint(model, actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
                     @constraint(model, actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale),
-                    # @constraint(model, actual_time[n][end] == p.times_journey[n][end]),
-                    # @constraint(model, actual_time[n][1] == p.times_journey[n][1]),
+                ]
+            else
+                actual_time_con[n] = [
+                    @constraint(model, actual_time[n][i] == p.times_journey[n][i]) for i in 1:length(p.times_journey[n])
                 ]
             end
 
             dropoff = p.Δm0[n] .≈ -40/m_scale
             pickup = p.Δm0[n] .> 0.0
 
-            if !adaptive_time
+            if fixed_rendezvous
                 # objective += x[n][end][7, end]
                 objective -= x[n][1][7, 1]
             else
