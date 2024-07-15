@@ -4,7 +4,8 @@
 mutable struct MixedIntegerProblem{T <: Real}
     id_journey::Union{Nothing, Vector{Vector{T}}}
     times_journey::Vector{Vector{T}}
-    id_journey_solutions::Union{Nothing, Vector{Vector{Vector{Int64}}}}
+    id_journey_solutions::Vector{Vector{Vector{Int64}}}
+    objective_solutions::Vector{Float64}
     id_subset::Vector{Int64}
     deployment_nums::Vector{Int64}
     deployment_arcs::Vector{Int64}
@@ -82,7 +83,8 @@ function MixedIntegerProblem(
     return MixedIntegerProblem(
         nothing,
         times_journey,
-        nothing,
+        Vector{Vector{Int64}}[],
+        Float64[],
         id_subset,
         deployment_nums,
         deployment_arcs,
@@ -238,6 +240,8 @@ function solve!(
     end
 
     p.id_journey_solutions = []
+    p.objective_solutions = []
+    p.solutions = 0
 
     # Add the default solution if it is provided
     if !isnothing(p.id_journey)
@@ -263,6 +267,7 @@ function solve!(
 
         if id_journey_solution ∉ p.id_journey_solutions
             push!(p.id_journey_solutions, id_journey_solution)
+            push!(p.objective_solutions, objective_value(model; result = i))
 
             p.solutions += 1
         end

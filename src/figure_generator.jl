@@ -591,13 +591,13 @@ function plot_graph_structure(
     plot_pruned = true,
     output_file = nothing,
     selection_index = 1,
-    figure_size = (900, 340)
+    figure_size = (900, 200)
 )
 
     stage_size = length(p.id_subset)
 
     stage_Δx = 0.1
-    node_Δy = 0.1
+    node_Δy = 0.05
 
     unused_edge_list = []
 
@@ -730,7 +730,7 @@ function plot_graph_structure(
 
     fixed_layout(_) = layout
 
-    f = Figure(size = figure_size, backgroundcolor = :white)
+    f = Figure(size = figure_size, backgroundcolor = :white, figure_padding = 0)
 
     ax = Axis(
         f[1, 1];
@@ -770,40 +770,42 @@ function plot_graph_structure(
 
     graphplot!(ax, empty_graph, 
         layout=fixed_layout,
-        ilabels = repeat(1:5, p.deployment_nums[selection_index] + p.collection_nums[selection_index]),
-        ilabels_fontsize = 9,
-        node_size = 30,
+        ilabels = repeat(1:length(mip_problem.id_subset), p.deployment_nums[selection_index] + p.collection_nums[selection_index]),
+        # ilabels_fontsize = 12,
+        # node_size = 20,
+        ilabels_fontsize = 8,
+        node_size = 15,
         node_marker=Circle;
     )
 
-    time_positions = vcat(
-        [stage_Δx*(stage-1+0.5) for stage in 1:p.deployment_arcs[selection_index]],
-        [stage_Δx*(p.deployment_arcs[selection_index] + 1)],
-        [stage_Δx*(stage-1+1+0.5) for stage in (p.deployment_nums[selection_index] + 1):(p.deployment_nums[selection_index] + p.collection_arcs[selection_index])]
-    )
+    # time_positions = vcat(
+    #     [stage_Δx*(stage-1+0.5) for stage in 1:p.deployment_arcs[selection_index]],
+    #     [stage_Δx*(p.deployment_arcs[selection_index] + 1)],
+    #     [stage_Δx*(stage-1+1+0.5) for stage in (p.deployment_nums[selection_index] + 1):(p.deployment_nums[selection_index] + p.collection_arcs[selection_index])]
+    # )
 
-    time_strings = vcat(
-        [latexstring("d_{i, j, $(v)}") for v in 1:p.deployment_arcs[selection_index]],
-        [latexstring("m_{i, j}")],
-        [latexstring("c_{i, j, $(v)}") for v in 1:p.collection_arcs[selection_index]],
-    )
+    # time_strings = vcat(
+    #     [latexstring("d_{i, j, $(v)}") for v in 1:p.deployment_arcs[selection_index]],
+    #     [latexstring("m_{i, j}")],
+    #     [latexstring("c_{i, j, $(v)}") for v in 1:p.collection_arcs[selection_index]],
+    # )
 
-    display(time_positions)
-    display(time_strings)
-    
+    # # display(time_positions)
+    # # display(time_strings)
 
-    text!(ax, 
-        time_positions,
-        fill(0.7*node_Δy, length(time_positions)),
-        text = time_strings,
-        align = (:center, :center),
-        fontsize = 20,
-    )
+    # text!(ax, 
+    #     time_positions,
+    #     fill(0.7*node_Δy, length(time_positions)),
+    #     text = time_strings,
+    #     align = (:center, :center),
+    #     fontsize = 20,
+    # )
 
     hidedecorations!(ax)
     hidespines!(ax)
 
-    ylims!(ax, [-node_Δy*(length(p.id_subset) - 0.5), node_Δy])
+    xlims!(ax, [-stage_Δx*0.2, stage_Δx*(p.deployment_nums[selection_index] + p.collection_arcs[selection_index] + 1) + stage_Δx*0.2])
+    ylims!(ax, [-node_Δy*(length(p.id_subset) - 0.5), node_Δy*0.5])
     
 
     # resize_to_layout!(f)
@@ -955,6 +957,42 @@ end
 
 
 
+function plot_convergence_comparison(
+    mip_problem_objectives, 
+    scp_problem_objectives
+)
+
+    f = Figure(size = (800, 400), backgroundcolor = :white)
+
+    cs = ColorSchemes.tableau_10
+    
+    ax = Axis(
+        f[1, 1]; 
+        xlabel = "MIP problem objective km/s", 
+        ylabel = "SCP problem objective kg", 
+    )
+
+    for i in 1:length(mip_problem_objectives)
+        scatter!(ax,
+            mip_problem_objectives[i],
+            scp_problem_objectives[i],
+            label = "Iteration $(i)"
+        )
+    end
+
+    f[1, 2] = Legend(f, ax, framevisible = false, unique = true, merge = true, labelsize=16)
+
+    resize_to_layout!(f)
+    display(f)
+
+    # if !isnothing(output_file)
+    #     save(output_file, f)
+    # end
+
+    return
+end
+
+
 
 
 
@@ -1048,68 +1086,76 @@ plot_graph_structure(
 
 
 
-id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])
-
-
-
-id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
-
+# id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])
+# id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
+id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
 
 
 mip_problem = MixedIntegerProblem(id_subset, [10], [10])
-mip_problem.cost_limit = 8/v_scale
+mip_problem.cost_limit = 10/v_scale
 
 
 join([@sprintf("%5s ", val) for val in id_subset])
 
 join([@sprintf("%5i ", val) for val in convert_time_to_mjd.(mip_problem.times_journey[1])])
 
-
 join([@sprintf("%5s ", val) for val in mip_problem.id_journey_solutions[5][1]])
 
 
 
 
+mip_problem_objectives = Vector{Float64}[]
+scp_problem_objectives = Vector{Float64}[]
+
+
+
+
+
+
 solve!(mip_problem;
     # self_cleaning = true,
     include_intermediate_transfer_cost = true,
     solutions_relative_allowance = 0.1,
-    solutions_count_maximum = 10,
+    solutions_count_maximum = 50,
     time_limit_seconds = 300
 )
 
 
-
+push!(mip_problem_objectives, mip_problem.objective_solutions.*v_scale)
 
 scp_problem = SequentialConvexProblem(
-    [mip_problem.id_journey_solutions[k][1] for k in 1:min(20, mip_problem.solutions)], 
-    [mip_problem.times_journey[1] for k in 1:min(20, mip_problem.solutions)];
+    [mip_problem.id_journey_solutions[k][1] for k in 1:min(50, mip_problem.solutions)], 
+    [mip_problem.times_journey[1] for k in 1:min(50, mip_problem.solutions)];
     objective_config = LoggedMassConfig(),
     trust_region_factor = 0.025,
-    mass_overhead = 1.0/m_scale
+    mass_overhead = 0.0/m_scale
 );
-
 
 solve!(scp_problem)
 
 
 
+push!(scp_problem_objectives, [-m_scale*scp_problem.Δm0[n][end] for n in 1:scp_problem.mixing_number])
 
-mip_problem = MixedIntegerProblem(id_subset, [7], [7];
-    times_journey = [scp_problem.times_journey[1]]
+
+
+
+plot_convergence_comparison(
+    mip_problem_objectives,
+    scp_problem_objectives
 )
 
-mip_problem.cost_limit = 15/v_scale
 
 
 
-
-solve!(mip_problem;
-    # self_cleaning = true,
-    include_intermediate_transfer_cost = true,
-    solutions_relative_allowance = 0.1,
-    solutions_count_maximum = 10
+mip_problem = MixedIntegerProblem(id_subset, [10], [10];
+    times_journey = [scp_problem.times_journey[argmax(scp_problem_objectives[end])]]
 )
+
+mip_problem.cost_limit = 10/v_scale
+
+
+
 
 
 
@@ -1117,6 +1163,18 @@ plot_thrust_information(scp_problem; solution_indices = [1])
 
 plot_trajectory(scp_problem; solution_indices = [1], plot_3d = false, rotating = true)
 
+
+
+
+
+
+plot_graph_structure(
+    mip_problem;
+    plot_pruned = true,
+    plot_optimal_path = true,
+    output_file = "output/plots/bip_big.png",
+    figure_size = (900, 500)
+)
 
 
 
@@ -1144,40 +1202,40 @@ plot_trajectory(scp_problem; solution_indices = [1], plot_3d = false, rotating =
 
 
 
-# while length(id_subset) < 30
-#     print("Size: \n$(length(id_subset)), last ID: $(id_subset[end])")
+while length(id_subset) < 20
+    print("Size: \n$(length(id_subset)), last ID: $(id_subset[end])")
 
-#     temp = []
+    temp = []
 
-#     for id in id_subset
-#         temp10 = all_ids[[minimum(norm.(eachcol(a .- asteroids_join_check[1:3, id, :]))) for a in eachslice(asteroids_join_check[1:3, :, :], dims=2)] .<= 0.05]
+    for id in id_subset
+        temp10 = all_ids[[minimum(norm.(eachcol(a .- asteroids_join_check[1:3, id, :]))) for a in eachslice(asteroids_join_check[1:3, :, :], dims=2)] .<= 0.05]
 
-#         temp = unique(vcat(temp, temp10))
-#     end
+        temp = unique(vcat(temp, temp10))
+    end
 
-#     temp = setdiff(temp, id_subset)
-#     # temp = setdiff(temp, used_ids)
+    temp = setdiff(temp, id_subset)
+    # temp = setdiff(temp, used_ids)
 
-#     print(", near asteroids: $(length(temp))")
+    print(", near asteroids: $(length(temp))")
 
-#     average_minimum_dv = fill(0.0, length(temp))
-#     # average_minimum_dv = fill(1000.0, length(temp))
+    average_minimum_dv = fill(0.0, length(temp))
+    # average_minimum_dv = fill(1000.0, length(temp))
 
-#     for id in id_subset
-#         transfer_dvs_deploy = [v_scale.*get_lambert_phase(id, i, check_times_deploy) for i in temp]
-#         transfer_dvs_collect = [v_scale.*get_lambert_phase(id, i, check_times_collect) for i in temp]
+    for id in id_subset
+        transfer_dvs_deploy = [v_scale.*get_lambert_phase(id, i, check_times_deploy) for i in temp]
+        transfer_dvs_collect = [v_scale.*get_lambert_phase(id, i, check_times_collect) for i in temp]
 
-#         average_minimum_dv .+= sum.(transfer_dvs_deploy)./length(check_times_deploy) .+ sum.(transfer_dvs_collect)./length(check_times_collect)
-#         # average_minimum_dv .+= minimum.(transfer_dvs_deploy) .+ minimum.(transfer_dvs_collect)
-#         # average_minimum_dv = min.(average_minimum_dv, minimum.(transfer_dvs_deploy) .+ minimum.(transfer_dvs_collect))
-#     end
+        average_minimum_dv .+= sum.(transfer_dvs_deploy)./length(check_times_deploy) .+ sum.(transfer_dvs_collect)./length(check_times_collect)
+        # average_minimum_dv .+= minimum.(transfer_dvs_deploy) .+ minimum.(transfer_dvs_collect)
+        # average_minimum_dv = min.(average_minimum_dv, minimum.(transfer_dvs_deploy) .+ minimum.(transfer_dvs_collect))
+    end
 
-#     minimum_id = temp[argmin(average_minimum_dv)]
+    minimum_id = temp[argmin(average_minimum_dv)]
 
-#     print(", lowest Δv = $(minimum(average_minimum_dv))")
+    print(", lowest Δv = $(minimum(average_minimum_dv))")
 
-#     push!(id_subset, minimum_id)
-# end
+    push!(id_subset, minimum_id)
+end
 
 
 
