@@ -336,9 +336,17 @@ function solve!(
 
     mixing = length(p.t_nodes)
 
-    model = Model(p.optimizer)
-    set_silent(model)
-    set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-8)
+    id_groups = get_journey_groups(p.id_journey)
+
+    models = []
+
+    for _ in 1:maximum(id_groups)
+        model = Model(p.optimizer)
+        set_silent(model)
+        set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-8)
+
+        push!(models, model)
+    end
 
     # State variables
     x = [[] for _ in 1:mixing]
@@ -361,8 +369,8 @@ function solve!(
     x_violation = [[] for _ in 1:mixing]
 
     # Terminal mass violation
-    m_violation = [@variable(model, lower_bound = 0.0, upper_bound = 1000.0) for _ in 1:mixing]
-    Δt_start = [@variable(model) for _ in 1:mixing]
+    m_violation = [@variable(models[id_groups[n]], lower_bound = 0.0, upper_bound = 1000.0) for n in 1:mixing]
+    Δt_start = [@variable(models[id_groups[n]]) for n in 1:mixing]
 
     for n in 1:mixing
         segments = length(p.x0[n])
@@ -373,44 +381,44 @@ function solve!(
             nodes = length(p.t_nodes[n][k])
 
             # Variables
-            push!(x[n], @variable(model, [i=1:7, j=1:nodes], start = p.x_nodes[n][k][i, j]))
-            push!(u[n], @variable(model, [i=1:4, j=1:(nodes-1)], start = p.u_nodes[n][k][i, j]))
-            push!(s[n], @variable(model, [i=1:(nodes-1)], start = 1.0))
-            push!(Δx0[n], @variable(model, [i=1:6]))
-            push!(Δxf[n], @variable(model, [i=1:6]))
-            push!(x_violation[n], @variable(model, [i=1:6]))
-            push!(Δv0[n], @variable(model, [i=1:3], start = p.Δv0[n][k][i]))
-            push!(Δvf[n], @variable(model, [i=1:3], start = p.Δvf[n][k][i]))
+            push!(x[n], @variable(models[id_groups[n]], [i=1:7, j=1:nodes], start = p.x_nodes[n][k][i, j]))
+            push!(u[n], @variable(models[id_groups[n]], [i=1:4, j=1:(nodes-1)], start = p.u_nodes[n][k][i, j]))
+            push!(s[n], @variable(models[id_groups[n]], [i=1:(nodes-1)], start = 1.0))
+            push!(Δx0[n], @variable(models[id_groups[n]], [i=1:6]))
+            push!(Δxf[n], @variable(models[id_groups[n]], [i=1:6]))
+            push!(x_violation[n], @variable(models[id_groups[n]], [i=1:6]))
+            push!(Δv0[n], @variable(models[id_groups[n]], [i=1:3], start = p.Δv0[n][k][i]))
+            push!(Δvf[n], @variable(models[id_groups[n]], [i=1:3], start = p.Δvf[n][k][i]))
 
             # SOC constraint for control
-            @constraint(model, [i=1:(nodes-1)], [u[n][k][4, i]; u[n][k][1:3, i]] in SecondOrderCone())
+            @constraint(models[id_groups[n]], [i=1:(nodes-1)], [u[n][k][4, i]; u[n][k][1:3, i]] in SecondOrderCone())
 
             # SOC constraint for injection Δv
-            @constraint(model, [p.Δv0_limit[n][k]; Δv0[n][k][1:3]] in SecondOrderCone())
-            @constraint(model, [p.Δvf_limit[n][k]; Δvf[n][k][1:3]] in SecondOrderCone())
+            @constraint(models[id_groups[n]], [p.Δv0_limit[n][k]; Δv0[n][k][1:3]] in SecondOrderCone())
+            @constraint(models[id_groups[n]], [p.Δvf_limit[n][k]; Δvf[n][k][1:3]] in SecondOrderCone())
 
             # Ensure positivity of the violation
-            @constraint(model, x_violation[n][k] .>= Δx0[n][k])
-            @constraint(model, x_violation[n][k] .>= -Δx0[n][k])
-            @constraint(model, x_violation[n][k] .>= Δxf[n][k])
-            @constraint(model, x_violation[n][k] .>= -Δxf[n][k])
+            @constraint(models[id_groups[n]], x_violation[n][k] .>= Δx0[n][k])
+            @constraint(models[id_groups[n]], x_violation[n][k] .>= -Δx0[n][k])
+            @constraint(models[id_groups[n]], x_violation[n][k] .>= Δxf[n][k])
+            @constraint(models[id_groups[n]], x_violation[n][k] .>= -Δxf[n][k])
 
             if fixed_segments
-                @constraint(model, s[n][k] .== 1.0)
+                @constraint(models[id_groups[n]], s[n][k] .== 1.0)
             end
         end
 
         if fixed_segments || fixed_rendezvous
-            @constraint(model, Δt_start[n] .== 0.0)
+            @constraint(models[id_groups[n]], Δt_start[n] .== 0.0)
         end
 
         # Limit maximum mass at start
         if typeof(p.objective_config) == LoggedMassConfig
             # @constraint(model, x[n][1][7, 1] <= log(1000/m_scale))
-            @constraint(model, x[n][1][7, 1] <= log(3000/m_scale))
+            @constraint(models[id_groups[n]], x[n][1][7, 1] <= log(3000/m_scale))
         else
             # @constraint(model, x[n][1][7, 1] <= 1000/m_scale)
-            @constraint(model, x[n][1][7, 1] <= 3000.0/m_scale)
+            @constraint(models[id_groups[n]], x[n][1][7, 1] <= 3000.0/m_scale)
         end
     end
 
@@ -433,49 +441,53 @@ function solve!(
     bad_thrust_mass_segments = [collect(1:length(x)) for x in p.x0]
     bad_mass_link_segments = [collect(2:length(x)) for x in p.x0]
 
-    # active_parts = collect(1:mixing)
+    active_models = collect(1:length(models))
 
     current_trust_region_factor = p.trust_region_factor
 
     for i in 1:scp_iterations
         Δt_nodes = [[t_nodes[2:end] .- t_nodes[1:(end-1)] for t_nodes in t_nodes] for t_nodes in p.t_nodes]
 
-        Δt_segments = [@expression(model, [i=1:length(p.x0[n])],
+        Δt_segments = [@expression(models[id_groups[n]], [i=1:length(p.x0[n])],
             sum(s[n][i] .* Δt_nodes[n][i])
         ) for n in 1:mixing]
 
-        actual_time = [@expression(model, [i=1:length(p.times_journey[n])], 
+        actual_time = [@expression(models[id_groups[n]], [i=1:length(p.times_journey[n])], 
             p.times_journey[n][1] + sum(vcat([0.0], Δt_segments[n][1:(i-1)])) + Δt_start[n]
         ) for n in 1:mixing]
 
-        objective = 0.0
+        objective = fill(AffExpr(0.0), length(models))
 
         for n in 1:mixing
+            if id_groups[n] ∉ active_models
+                continue
+            end
+
             for k in bad_dynamic_segments[n]
                 nodes = size(p.t_nodes[n][k], 1)
 
                 for con in dynamic_con[n][k]
-                    delete(model, con)
+                    delete(models[id_groups[n]], con)
                 end
                 
                 for con in delation_dynamic_con[n][k]
-                    delete(model, con)
+                    delete(models[id_groups[n]], con)
                 end
 
                 for con in trust_region_dynamic_con[n][k]
-                    delete(model, con)
+                    delete(models[id_groups[n]], con)
                 end
 
                 for con in segment_time_con[n][k]
-                    delete(model, con)
+                    delete(models[id_groups[n]], con)
                 end
 
                 for con in segment_start_con[n][k]
-                    delete(model, con)
+                    delete(models[id_groups[n]], con)
                 end
 
                 for con in segment_end_con[n][k]
-                    delete(model, con)
+                    delete(models[id_groups[n]], con)
                 end
 
                 # Get the state transition matrices from automatic differentiation
@@ -500,16 +512,16 @@ function solve!(
                     Ts[:, j] * Δt_nodes[n][k][j]
                     for j in 1:(nodes-1))
 
-                dynamic_con[n][k] = @constraint(model,
+                dynamic_con[n][k] = @constraint(models[id_groups[n]],
                     [i=1:(nodes-1)],
                     x[n][k][:, i+1] .== As[:, :, i] * x[n][k][:, i] .+ Bs[:, :, i] * u[n][k][:, i] .+ Ts[:, i] * (Δt_nodes[n][k][i] .* s[n][k][i]) .+ cs[:, i]
                 )
 
-                delation_dynamic_con[n][k] = @constraint(model,
+                delation_dynamic_con[n][k] = @constraint(models[id_groups[n]],
                     1.0 - current_trust_region_factor .<= s[n][k] .<= 1.0 + current_trust_region_factor
                 )
 
-                trust_region_dynamic_con[n][k] = @constraint(model,
+                trust_region_dynamic_con[n][k] = @constraint(models[id_groups[n]],
                     [i=1:(nodes-1)],
                     -5e1*current_trust_region_factor - 1e-3 .<= x[n][k][1:6, i] .- p.x_nodes[n][k][1:6, i] .<= 5e1*current_trust_region_factor + 1e-3
                 )
@@ -525,13 +537,13 @@ function solve!(
                 start_jac = FiniteDiff.finite_difference_jacobian(start_position_function, [p.times_journey[n][k]])
                 final_jac = FiniteDiff.finite_difference_jacobian(final_position_function, [p.times_journey[n][k + 1]])
 
-                segment_start_con[n][k] = @constraint(model, 
+                segment_start_con[n][k] = @constraint(models[id_groups[n]], 
                     x[n][k][1:6, 1] .== 
                         (p.x0[n][k][1:6] .+ vcat([0, 0, 0], Δv0[n][k]) .+ 
                         start_jac * (actual_time[n][k] - p.times_journey[n][k]) .+ Δx0[n][k])[:]
                 )      
 
-                segment_end_con[n][k] = @constraint(model, 
+                segment_end_con[n][k] = @constraint(models[id_groups[n]], 
                     x[n][k][1:6, nodes] .== 
                         (p.xf[n][k][1:6] .- vcat([0, 0, 0], Δvf[n][k][1:3]) .+ 
                         final_jac * (actual_time[n][k+1] - p.times_journey[n][k + 1]) .+ Δxf[n][k])[:]
@@ -543,16 +555,16 @@ function solve!(
                 nodes = size(p.t_nodes[n][k], 1)
 
                 for con in thrust_mass_con[n][k]
-                    delete(model, con)
+                    delete(models[id_groups[n]], con)
                 end
 
                 thrust_mass_con[n][k] = if typeof(p.objective_config) == LoggedMassConfig
-                    @constraint(model,
+                    @constraint(models[id_groups[n]],
                         [i=1:(nodes-1)],
                         u[n][k][4, i] <= exp.(-p.x_nodes[n][k][7, i]).*(1.0 .- x[n][k][7, i] .+ p.x_nodes[n][k][7, i])
                     )
                 else
-                    @constraint(model,
+                    @constraint(models[id_groups[n]],
                         [i=1:(nodes-1)],
                         u[n][k][4, i] <= 1.0
                     )
@@ -579,49 +591,49 @@ function solve!(
             # Mass linkage constraints
             for k in bad_mass_link_segments[n]
                 for con in mass_link_con[n][k]
-                    delete(model, con)
+                    delete(models[id_groups[n]], con)
                 end
 
                 mass_link_con[n][k] = if typeof(p.objective_config) == LoggedMassConfig 
-                    [@constraint(model,
+                    [@constraint(models[id_groups[n]],
                         x[n][k][7, 1] == log(exp(p.x_nodes[n][k-1][7, end]) + p.Δm0[n][k]) + (1.0/(1.0 + p.Δm0[n][k]/exp(p.x_nodes[n][k-1][7, end])))*(x[n][k-1][7, end] - p.x_nodes[n][k-1][7, end])
                     )]
                 else
                     
-                    [@constraint(model,
+                    [@constraint(models[id_groups[n]],
                         x[n][k][7, 1] == x[n][k-1][7, end] + p.Δm0[n][k]
                     )]
                 end
             end
 
             for con in mass_end_con[n]
-                delete(model, con)
+                delete(models[id_groups[n]], con)
             end
 
             mass_end_con[n] = if typeof(p.objective_config) == LoggedMassConfig
-                [@constraint(model, x[n][end][7, end] + m_violation[n] >= log(500/m_scale + p.mass_overhead - p.Δm0[n][end]))]
+                [@constraint(models[id_groups[n]], x[n][end][7, end] + m_violation[n] >= log(500/m_scale + p.mass_overhead - p.Δm0[n][end]))]
             else
-                [@constraint(model, x[n][end][7, end] + m_violation[n] >= 500/m_scale + p.mass_overhead - p.Δm0[n][end])]
+                [@constraint(models[id_groups[n]], x[n][end][7, end] + m_violation[n] >= 500/m_scale + p.mass_overhead - p.Δm0[n][end])]
             end
 
             for con in actual_time_con[n]
-                delete(model, con)
+                delete(models[id_groups[n]], con)
             end
 
             if !fixed_rendezvous
                 for con in time_start_movement_con[n]
-                    delete(model, con)
+                    delete(models[id_groups[n]], con)
                 end
 
-                time_start_movement_con[n] = [@constraint(model, -2e-1*current_trust_region_factor <= Δt_start[n] <= 2e-1*current_trust_region_factor)]
+                time_start_movement_con[n] = [@constraint(models[id_groups[n]], -2e-1*current_trust_region_factor <= Δt_start[n] <= 2e-1*current_trust_region_factor)]
 
                 actual_time_con[n] = [
-                    @constraint(model, actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
-                    @constraint(model, actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale),
+                    @constraint(models[id_groups[n]], actual_time[n][end] <= maximum_time - 10*current_trust_region_factor*day_scale),
+                    @constraint(models[id_groups[n]], actual_time[n][1] >= 0.0 + 10*current_trust_region_factor*day_scale),
                 ]
             else
                 actual_time_con[n] = [
-                    @constraint(model, actual_time[n][i] == p.times_journey[n][i]) for i in 1:length(p.times_journey[n])
+                    @constraint(models[id_groups[n]], actual_time[n][i] == p.times_journey[n][i]) for i in 1:length(p.times_journey[n])
                 ]
             end
 
@@ -630,24 +642,30 @@ function solve!(
 
             if fixed_rendezvous
                 # objective += x[n][end][7, end]
-                objective -= x[n][1][7, 1]
+                objective[id_groups[n]] -= x[n][1][7, 1]
             else
-                objective += sum(actual_time[n][pickup]) - sum(actual_time[n][dropoff])
+                objective[id_groups[n]] += sum(actual_time[n][pickup]) - sum(actual_time[n][dropoff])
             end
 
-            objective -= 5e3*m_violation[n]
-            objective -= 1e4*sum(sum.(x_violation[n]))
+            objective[id_groups[n]] -= 5e3*m_violation[n]
+            objective[id_groups[n]] -= 1e4*sum(sum.(x_violation[n]))
             # objective -= 1e-1*sum([sum(u[n][i][4, :].*Δt_nodes[n][i]) for i in 1:length(u[n])])
         end
 
-        @objective(model, 
-            Max, 
-            objective
-        )
-        
-        JuMP.optimize!(model)
+        for i in active_models
+            @objective(models[i], 
+                Max, 
+                objective[i]
+            )
 
+            JuMP.optimize!(models[i])
+        end
+        
         for n in 1:mixing
+            if id_groups[n] ∉ active_models
+                continue
+            end
+
             p.times_journey[n] = JuMP.value.(actual_time[n])
             p.u_nodes[n] = [JuMP.value.(u) for u in u[n]]
             p.Δv0[n] = [JuMP.value.(Δv0) for Δv0 in Δv0[n]]
@@ -656,7 +674,7 @@ function solve!(
             p.t_nodes[n] = [vcat(0.0, cumsum(JuMP.value.(s[n][k]) .* Δt_nodes[n][k])) for k in 1:length(p.x0[n])]
         end
 
-        maximum_error_mixing = 0.0
+        maximum_error = fill(0.0, mixing)
 
         for n in 1:mixing
             dynamical_errors = []
@@ -680,25 +698,15 @@ function solve!(
                     p.times_journey[n][k+1]
                 )[:]
 
-                # display(p.x0[n][k])
-                # display(p.xf[n][k])
-
                 if k != 1
                     if typeof(p.objective_config) == LoggedMassConfig
-                        p.x0[n][k][7] = log(exp(p.xf[n][k - 1][7]) + p.Δm0[n][k])
+                        p.x0[n][k][7] = log(max(1/6, exp(p.xf[n][k - 1][7]) + p.Δm0[n][k]))
                     else
-                        p.x0[n][k][7] = p.xf[n][k - 1][7] + p.Δm0[n][k] 
+                        p.x0[n][k][7] = max(1/6, p.xf[n][k - 1][7] + p.Δm0[n][k])
                     end
                 else
                     p.x0[n][k][7] = value.(x[n][k][7, 1])
                 end
-
-                # display(p.x0[n][k][7])
-
-                # p.x0[n][k][7] = value.(x[n][k][7, 1])
-                # p.xf[n][k][7] = value.(x[n][k][7, end])
-
-                # p.xf[n][k][7] = value.(x[n][k][7, end])
 
                 p.u_nodes[n][k][4, :] = norm.(eachcol(p.u_nodes[n][k][1:3, :]))
 
@@ -710,14 +718,7 @@ function solve!(
                     p.objective_config,
                 )
 
-                # display(p.x_nodes[n][k])
-
-                # p.x0[n][k][7] = p.x_nodes[n][k][7, 1]
                 p.xf[n][k][7] = p.x_nodes[n][k][7, end]
-
-                # if k != length(p.x0[n])
-                #     p.x0[n][k + 1][7] = 
-                # end
 
                 push!(
                     dynamical_errors, 
@@ -738,7 +739,7 @@ function solve!(
                 end
             end
 
-            current_maximum_error = maximum(vcat(dynamical_errors, mass_link_errors))
+            maximum_error[n] = maximum(vcat(dynamical_errors, mass_link_errors))
 
             start_mass = if typeof(p.objective_config) == LoggedMassConfig
                 exp(p.x_nodes[n][1][7, 1])
@@ -757,24 +758,34 @@ function solve!(
             else
                 @printf "\n     "
             end
-            
-            temp = @sprintf "%10.6e  %10.5f  %10.5f  %10.5f  %7.6f  %s" current_maximum_error start_mass*m_scale end_mass*m_scale -m_scale*p.Δm0[n][end] current_trust_region_factor termination_status(model)
 
-            if current_maximum_error < p.dynamical_error
+            mixed_ship = if count(==(id_groups[n]), id_groups) == 1
+                " "
+            else
+                "*"
+            end
+            
+            temp = @sprintf "%2i%1s  %10.6e  %10.5f  %10.5f  %10.5f  %7.6f  %s" id_groups[n] mixed_ship maximum_error[n] start_mass*m_scale end_mass*m_scale -m_scale*p.Δm0[n][end] current_trust_region_factor termination_status(models[id_groups[n]])
+
+            if maximum_error[n] < p.dynamical_error
                 printstyled(temp; color=:green)
             else
                 printstyled(temp; color=:red)
             end
-
-            maximum_error_mixing = max(maximum_error_mixing, current_maximum_error)
         end
 
-        if (maximum_error_mixing <= p.dynamical_error) || (termination_status(model) ∉ [OPTIMAL, SLOW_PROGRESS])
+        for n in 1:length(models)
+            if (maximum(maximum_error[id_groups .== n]) < p.dynamical_error) || (termination_status(models[n]) ∉ [OPTIMAL, SLOW_PROGRESS])
+                setdiff!(active_models, n)
+            end
+        end
+
+        if length(active_models) == 0
             break
         end
 
         if i >= 10
-            current_trust_region_factor = p.trust_region_factor * ((scp_iterations - i) / (scp_iterations - 10))^2.0 + 5e-5
+            current_trust_region_factor = max(p.trust_region_factor * ((scp_iterations - i) / (scp_iterations - 10))^2.0, 5e-4)
         end 
     end
 end

@@ -1735,3 +1735,45 @@ function get_state_rotation_matrix(
         0.0 0.0 0.0 0.0 0.0 1.0
     ]
 end
+
+function get_journey_groups(
+    id_journey
+)
+    group_index = 1 
+
+    id_groups = zeros(Int64, length(id_journey))
+
+    for i in 1:length(id_journey)
+        # Not assigned to a group
+        if id_groups[i] == 0
+            id_groups[i] = group_index
+
+            # Get ID of current group
+            group_ids = unique(id_journey[i][2:(end-1)])
+
+            # Remove all self-cleaned asteroids
+            filter!(x->count(==(x), id_journey[i][2:(end-1)])==1, group_ids)
+
+            previous_length = 0
+
+            while length(group_ids) != previous_length
+                previous_length = length(group_ids)
+
+                for j in (i+1):length(id_journey)
+                    ids = unique(id_journey[j][2:(end-1)])
+
+                    filter!(x->count(==(x), id_journey[j][2:(end-1)])==1, ids)
+
+                    if length(intersect(group_ids, ids)) > 0
+                        id_groups[j] = group_index
+                        group_ids = unique(vcat(group_ids, ids))
+                    end
+                end
+            end
+
+            group_index += 1
+        end
+    end
+
+    return id_groups
+end

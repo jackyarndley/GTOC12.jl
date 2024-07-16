@@ -968,7 +968,7 @@ function plot_convergence_comparison(
     
     ax = Axis(
         f[1, 1]; 
-        xlabel = "MIP problem objective km/s", 
+        xlabel = "BIP problem index", 
         ylabel = "SCP problem objective kg", 
     )
 
@@ -1086,9 +1086,9 @@ plot_graph_structure(
 
 
 
-# id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])
+id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])
 # id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
-id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
+# id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
 
 
 mip_problem = MixedIntegerProblem(id_subset, [10], [10])
@@ -1111,12 +1111,14 @@ scp_problem_objectives = Vector{Float64}[]
 
 
 
+solution_number = 20
+
 
 solve!(mip_problem;
     # self_cleaning = true,
     include_intermediate_transfer_cost = true,
-    solutions_relative_allowance = 0.1,
-    solutions_count_maximum = 50,
+    solutions_relative_allowance = 0.2,
+    solutions_count_maximum = 3*solution_number,
     time_limit_seconds = 300
 )
 
@@ -1124,11 +1126,12 @@ solve!(mip_problem;
 push!(mip_problem_objectives, mip_problem.objective_solutions.*v_scale)
 
 scp_problem = SequentialConvexProblem(
-    [mip_problem.id_journey_solutions[k][1] for k in 1:min(50, mip_problem.solutions)], 
-    [mip_problem.times_journey[1] for k in 1:min(50, mip_problem.solutions)];
+    [mip_problem.id_journey_solutions[k][1] for k in 1:min(solution_number, mip_problem.solutions)], 
+    [mip_problem.times_journey[1] for k in 1:min(solution_number, mip_problem.solutions)];
     objective_config = LoggedMassConfig(),
-    trust_region_factor = 0.025,
-    mass_overhead = 0.0/m_scale
+    trust_region_factor = 0.05,
+    mass_overhead = 0.0/m_scale,
+    dynamical_error = 1e-4
 );
 
 solve!(scp_problem)
@@ -1141,9 +1144,14 @@ push!(scp_problem_objectives, [-m_scale*scp_problem.Δm0[n][end] for n in 1:scp_
 
 
 plot_convergence_comparison(
-    mip_problem_objectives,
+    [collect(1:min(solution_number, length(mip_problem_objectives[i]))) for i in 1:length(mip_problem_objectives)],
     scp_problem_objectives
 )
+
+# plot_convergence_comparison(
+#     mip_problem_objectives,
+#     scp_problem_objectives
+# )
 
 
 
@@ -1242,6 +1250,22 @@ end
 
 
 
+
+# id_journey, times_journey, mined_mass_submitted, penalised_mass_submitted, groups_submitted, result_files_submitted = load_result_folders_grouping(["data/bundled/submitted/OptimiCS.txt"])
+
+
+
+
+# p = SequentialConvexProblem(
+#     id_journey, 
+#     times_journey;
+#     objective_config = LoggedMassConfig(),
+#     trust_region_factor = 0.025,
+#     mass_overhead = 0.0/m_scale,
+#     dynamical_error = 1e-4
+# );
+
+# solve!(p)
 
 
 
@@ -1402,6 +1426,5 @@ function plot_team_improvements(
 
 
 end
-
 
 
