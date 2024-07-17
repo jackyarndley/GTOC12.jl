@@ -20,7 +20,7 @@ id_journey = [
 ]
 
 times_journey = [
-    convert_mjd_to_time([64428.0 64913.0 65208.0 65648.0 66145.0 66550.0][:]),
+    convert_mjd_to_time([64438.0 64913.0 65208.0 65648.0 66145.0 66440.0][:]),
 ]
 
 
@@ -151,16 +151,16 @@ function plot_gtoc12_problem(
 
     cs = ColorSchemes.tableau_10
 
-    f = Figure(size = (1000, 480), backgroundcolor = :white)
+    f = Figure(size = (1000, 480), backgroundcolor = :white, figure_padding = 0)
 
     ax1 = Axis3(
         f[1, 1]; 
         # xlabel = "x [AU]", 
         # ylabel = "y [AU]", 
         limits = 0.84.*(-3.0, 3.0, -3.0, 3.0, -0.75, 0.75),
-        azimuth = -π/2,
-        elevation = π/10,
-        aspect = (3, 3, 1)
+        azimuth = -π/2 + 0.2,
+        elevation = π/10 + 0.03,
+        aspect = (3, 3, 1),
     )
 
     scatter!(ax1,
@@ -256,17 +256,17 @@ function plot_gtoc12_problem(
                 end
 
                 text = [
-                    "",
+                    "Departure",
                     "Asteroid 1\nDeployment",
                     "Asteroid 2\nDeployment",
                     "Asteroid 1\nCollection",
                     "Asteroid 2\nCollection",
-                    ""
+                    "Arrival"
                 ]
 
                 
                 offsets = [
-                    (5, 0),
+                    (-7.5, 0),
                     (5, 0),
                     (5, 0),
                     (5, 0),
@@ -275,7 +275,7 @@ function plot_gtoc12_problem(
                 ]
 
                 alignment = [
-                    (:left, :bottom),
+                    (:right, :bottom),
                     (:left, :bottom),
                     (:left, :bottom),
                     (:left, :bottom),
@@ -1184,6 +1184,27 @@ plot_graph_structure(
     figure_size = (900, 500)
 )
 
+
+
+
+
+scp_problem = SequentialConvexProblem(
+    [mip_problem.id_journey_solutions[1][1]], 
+    [mip_problem.times_journey[1]];
+    objective_config = LoggedMassConfig(),
+    trust_region_factor = 0.01,
+    mass_overhead = 0.0/m_scale,
+    dynamical_error = 1e-4
+);
+
+scp_problem.trust_region_factor = 0.005
+
+solve!(scp_problem)
+
+
+plot_thrust_information(scp_problem; solution_indices = [1])
+
+plot_trajectory(scp_problem; solution_indices = [1], plot_3d = false, rotating = true)
 
 
 
