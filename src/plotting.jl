@@ -136,7 +136,7 @@ function plot_trajectory(
     f = Figure(size = (900, 800), backgroundcolor = :white)
 
     if isnothing(solution_indices)
-        solution_indices = collect(1:mixing)
+        solution_indices = collect(1:p.mixing_number)
     end
 
     ax1 = if plot_3d
@@ -197,18 +197,25 @@ function plot_trajectory(
 
     for n in solution_indices
         for k in 1:p.segment_number[n]
+            x0 = p.x0[n][k]
+            xf = p.xf[n][k]
+
+            if rotating
+                x0 = get_state_rotation_matrix(2π*(p.times_journey[n][k])/rotation_rate)*x0[1:6]
+                xf = get_state_rotation_matrix(2π*(p.times_journey[n][k+1])/rotation_rate)*xf[1:6]
+            end
 
             scatter!(ax1,
-                p.x0[n][k][1],
-                p.x0[n][k][2],
-                p.x0[n][k][3],
+                x0[1],
+                x0[2],
+                x0[3],
             )
 
             if k == p.segment_number[n]
                 scatter!(ax1,
-                    p.xf[n][k][1],
-                    p.xf[n][k][2],
-                    p.xf[n][k][3],
+                    xf[1],
+                    xf[2],
+                    xf[3],
                 )
             end
 

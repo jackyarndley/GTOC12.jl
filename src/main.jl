@@ -50,7 +50,7 @@ out = collect(1:60000)[(norm.(eachcol(ephemeris_cartesian_at(asteroids_classical
 
 
 
-scp_iterations = 80
+scp_iterations = 40
 
 node_time_spacing = 20.0*day_scale
 
@@ -65,25 +65,26 @@ p = SequentialConvexProblem(
     id_journey, 
     times_journey;
     objective_config = LoggedMassConfig(),
-    trust_region_factor = 0.05,
-    mass_overhead = 1.0/m_scale
+    trust_region_factor = 0.02,
+    mass_overhead = 0.1/m_scale
 );
 
-solve!(p,
-    MixedTimeAdaptive(); 
-    adaptive_time = true
-)
+solve!(p)
+
+
 
 convert_logged_mass_to_mass!(p)
 
-solve!(p,
-    MixedTimeAdaptive(); 
-    adaptive_time = true
-)
+solve!(p)
 
-solve!(p,
-    MixedTimeAdaptive(); 
-    adaptive_time = false
+p.mass_overhead = 0.1/m_scale
+
+
+p.mass_overhead = 0.01/m_scale
+
+solve!(p; 
+    fixed_segments = true,
+    fixed_rendezvous = true
 )
 
 

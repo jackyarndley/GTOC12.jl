@@ -38,12 +38,17 @@ p = SequentialConvexProblem(
     id_journey, 
     times_journey;
     objective_config = LoggedMassConfig(),
-    trust_region_factor = 0.02,
+    trust_region_factor = 0.01,
     mass_overhead = 1.0/m_scale
 );
 
 solve!(p)
 
+convert_logged_mass_to_mass!(p)
+
+solve!(p)
+
+solve!(p; fixed_rendezvous = true)
 
 
 
@@ -1340,6 +1345,375 @@ plot_team_improvements(
 
 
 
+scp_iterations = 40
+
+node_time_spacing = 20.0*day_scale
+
+
+id_journey, times_journey = load_result_files(
+    ["data/PART_1.txt"]
+)
+
+p = SequentialConvexProblem(
+    id_journey, 
+    times_journey;
+    objective_config = LoggedMassConfig(),
+    trust_region_factor = 0.02,
+    mass_overhead = 0.1/m_scale
+);
+
+solve!(p)
+
+
+plot_thrust_profile_paper(p)
+
+
+
+plot_trajectory_paper(p; rotating = false, plot_3d = false)
+
+plot_trajectory_paper(p; rotating = true, plot_3d = false)
+
+
+plot_trajectory_paper(p; rotating = true, plot_3d = true)
+
+
+
+
+
+
+
+function plot_trajectory_paper(
+    p::SequentialConvexProblem;
+    plot_3d = false,
+    solution_indices = nothing,
+    rotating = false
+)
+    f = Figure(size = (800, 500), backgroundcolor = :white, figure_padding = 10)
+
+    if isnothing(solution_indices)
+        solution_indices = collect(1:p.mixing_number)
+    end
+
+    ax1 = if plot_3d
+        Axis3(
+            f[1:2, 1:2]; 
+            xlabel = "x [AU]", 
+            ylabel = "y [AU]", 
+            zlabel = "z [AU]", 
+            # limits = (2.2, 3.2, -0.5, 0.5, -0.5, 0.5),
+            limits = (-3.0, 3.0, -3.0, 3.0, -3.0, 3.0),
+            # aspect = 1,
+            # perspectiveness = 1.0,
+        )
+    else
+        Axis(
+            f[1:2, 1:2]; 
+            xlabel = "x [AU]", 
+            ylabel = "y [AU]", 
+            # limits = (2.2, 3.2, -0.5, 0.5),
+            limits = (-0.5, 3.2, -1.1, 1.1),
+            # limits = (0.5, 1.5, -3.0, -2.0),
+            aspect = 1.87
+        )
+    end
+
+    rotation_rate = if rotating
+        visited_ids = setdiff(unique(stack(p.id_journey[solution_indices])), [0, -3])
+
+        a_visited = asteroids_classical[1, visited_ids]
+
+        period_visited = 2π * sqrt.(a_visited.^3/μ)
+
+        mean(period_visited)
+    else
+        0.0
+    end
+
+    visited_angle = -1.26
+
+    # scatter!(ax1,
+    #     [0.0],
+    #     [0.0],
+    #     [0.0],
+    #     color = :black
+    # )
+
+    # ν_plot = collect(LinRange(0.0, 2π, 400)) 
+
+    t_planet = convert_mjd_to_time.(collect(mjd_start:10:mjd_end))
+
+    for (i, planet_classical) in enumerate(eachcol(planets_classical))
+        # temp = repeat(planet_classical, 1, 400)
+        # temp[6, :] .= ν_plot
+        # temp = hcat(classical_to_cartesian.(eachcol(temp))...)
+
+        # temp = 
+
+        xp = integrate_trajectory(
+            planets_cartesian[:, i],
+            t_planet
+        )
+
+        if rotating
+            xp = stack(get_state_rotation_matrix.(2π*t_planet/rotation_rate .+ visited_angle).*eachcol(xp[1:6, :]))
+        end
+
+        lines!(ax1,
+            xp[1, :],
+            xp[2, :],
+            xp[3, :],
+            linestyle = :dashdot,
+            color = Makie.wong_colors()[[2, 1, 6][i]],
+            alpha = 0.35
+        )
+    end
+
+    for n in solution_indices
+        for k in 1:p.segment_number[n]
+            x0 = p.x0[n][k]
+            xf = p.xf[n][k]
+
+            if rotating
+                x0 = get_state_rotation_matrix(2π*(p.times_journey[n][k])/rotation_rate + visited_angle)*x0[1:6]
+                xf = get_state_rotation_matrix(2π*(p.times_journey[n][k+1])/rotation_rate + visited_angle)*xf[1:6]
+            end
+
+            scatter!(ax1,
+                x0[1],
+                x0[2],
+                x0[3],
+            )
+
+            if k == p.segment_number[n]
+                scatter!(ax1,
+                    xf[1],
+                    xf[2],
+                    xf[3],
+                )
+            end
+
+            t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
+
+            if !(t_fine[end] ≈ p.t_nodes[n][k][end])
+                push!(t_fine, p.t_nodes[n][k][end])
+            end
+
+            x_fine = integrate_trajectory(
+                p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+                t_fine;
+                t_nodes = p.t_nodes[n][k],
+                u_nodes = p.u_nodes[n][k],
+                p.objective_config,
+            )
+
+            x_target_fine = integrate_trajectory(
+                ephermeris_cartesian_from_id(p.id_journey[n][k + 1], p.times_journey[n][k])[:],
+                t_fine
+            )
+
+            if rotating
+                rotation_matrix = get_state_rotation_matrix.(2π*(t_fine .+ p.times_journey[n][k])/rotation_rate .+ visited_angle)
+
+                x_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_fine[1:6, :]))
+
+                x_target_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_target_fine[1:6, :]))
+            end
+
+            lines!(ax1,
+                x_fine[1, :],
+                x_fine[2, :],
+                x_fine[3, :],
+                color = :black
+            )
+
+            lines!(ax1,
+                x_target_fine[1, :],
+                x_target_fine[2, :],
+                x_target_fine[3, :],
+                alpha = 0.2,
+                color = :black
+            )
+
+
+            # thrust_force = if p.objective_config == LoggedMassConfig()
+            #     temp = exp.(p.x_nodes[n][k][7, 1:end-1])
+            #     p.u_nodes[n][k][4, :] .* temp * thrust * m_scale * a_scale * 1e3
+            # else
+            #     p.u_nodes[n][k][4, :] * thrust * m_scale * a_scale * 1e3
+            # end
+
+            # sel = thrust_force .>= 0.01
+
+            # thrust_vectors = stack(normalize.(eachcol(p.u_nodes[n][k][1:3, :]))).*thrust_force'
+
+            # length_scale = 0.2
+
+            # for i in collect(1:length(thrust_force))[sel]
+            #     lines!(ax1,
+            #         [p.x_nodes[n][k][1, i], p.x_nodes[n][k][1, i] + length_scale*thrust_vectors[1, i]],
+            #         [p.x_nodes[n][k][2, i], p.x_nodes[n][k][2, i] + length_scale*thrust_vectors[2, i]],
+            #         [p.x_nodes[n][k][3, i], p.x_nodes[n][k][3, i] + length_scale*thrust_vectors[3, i]],
+            #         color = :black,
+            #         alpha = 0.5,
+            #         linewidth = 1,
+            #     )
+            # end
+        end
+    end
+
+
+
+    
+
+    # hidedecorations!(
+    #     ax1
+    # )
+
+    resize_to_layout!(f)
+    display(f)
+
+    return
+end
+
+
+
+
+
+function plot_thrust_profile_paper(
+    p::SequentialConvexProblem,
+    output_file = nothing
+)
+    f = Figure(size = (800, 200), backgroundcolor = :white, figure_padding = 5)
+    axs = []
+
+    cs = ColorSchemes.tableau_10
+
+    mixing = length(p.x0)
+    
+    n = 1
+
+    deployments = sum(p.Δm0[n] .≈ -40/m_scale)
+
+    m_fuel = if typeof(p.objective_config) == LoggedMassConfig
+        m_scale*exp(p.x_nodes[n][1][7, 1]) - 500.0 - 40.0*deployments - (m_scale*exp(p.x_nodes[n][end][7, end]) - 500.0 + m_scale*p.Δm0[n][end])
+    else
+        m_scale*p.x_nodes[n][1][7, 1] - 500.0 - 40.0*deployments - (m_scale*p.x_nodes[n][end][7, end] - 500.0 + m_scale*p.Δm0[n][end])
+    end
+
+    m_returned = -m_scale*p.Δm0[n][end]
+
+    t_nodes_combined = vcat(
+        [p.t_nodes[n][k][1:end-1] .+ p.times_journey[n][k] for k in 1:length(p.x0[n])]...
+    )
+    u_nodes_combined = hcat(p.u_nodes[n]...)
+    x_nodes_combined = hcat([val[:, 1:end-1] for val in p.x_nodes[n]]...)
+
+    push!(t_nodes_combined, p.times_journey[end][end])
+    u_nodes_combined = hcat(u_nodes_combined, p.u_nodes[end][end][:, end])
+    x_nodes_combined = hcat(x_nodes_combined, p.x_nodes[end][end][:, end])
+
+    thrust_force = if p.objective_config == LoggedMassConfig()
+        temp = exp.(x_nodes_combined[7, :])
+        u_nodes_combined[4, :] .* temp * thrust * m_scale * a_scale * 1e3
+    else
+        u_nodes_combined[4, :] * thrust * m_scale * a_scale * 1e3
+    end
+    
+    ax = Axis(
+        f[i, 1]; 
+        xlabel = "time [MJD]", 
+        # xticksvisible = false,
+        # xticklabelsvisible = false,
+        ylabel = "thrust", 
+        xticks = [65000, 66000, 67000, 68000, 69000],
+        yticks = ([0.0, 0.6], ["0.0", "max"]),
+        xgridvisible = false,
+        limits = (mjd_start, mjd_end, -0.05, 0.65)
+    )
+
+    push!(axs, ax)
+
+    # vlines!(
+    #     ax,
+    #     convert_time_to_mjd(t_nodes_combined),
+    #     color = :black,
+    #     alpha = 0.1,
+    # )
+
+    Label(
+        f[i, 1, Right()], 
+        @sprintf("%.2f kg fuel\n%.2f kg mined", m_fuel, m_returned), 
+        # font = :italic, 
+        width = 120,
+        justification = :left,
+        padding = (10, 0, 0, 0)
+    )
+
+
+# text!(ax, 
+#     time_positions,
+#     fill(0.7*node_Δy, length(time_positions)),
+#     text = time_strings,
+#     align = (:center, :center),
+#     fontsize = 20,
+# )
+
+    # plot_location_vertical_markers(
+    #     ax, 
+    #     convert_time_to_mjd(p.times_journey[n]), 
+    #     p.id_journey[n], 
+    #     p.Δm0[n]; 
+    #     vertical_position = 1.05*maximum(thrust_force)
+    # )
+
+    stairs!(
+        ax, 
+        convert_time_to_mjd(t_nodes_combined), 
+        thrust_force;
+        step = :post,
+        color = :black,
+        linewidth = 1.5,
+    )
+
+    
+    vlines!(
+        ax,
+        convert_time_to_mjd(p.times_journey[n][1]),
+        color = cs[1],
+        linewidth = 2,
+        alpha = 0.8
+    )
+
+    
+    vlines!(
+        ax,
+        convert_time_to_mjd(p.times_journey[n][end]),
+        color = cs[1],
+        linewidth = 2,
+        alpha = 0.8
+    )
+
+    vlines!(
+        ax,
+        convert_time_to_mjd(p.times_journey[n][2:(end-1)]),
+        color = cs[3],
+        linewidth = 2,
+        alpha = 0.8
+    )
+
+
+
+
+    # linkxaxes!(axs...)
+    resize_to_layout!(f)
+    display(f)
+
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
+    return
+end
 
 
 

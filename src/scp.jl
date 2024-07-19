@@ -571,27 +571,28 @@ function solve!(
                 end
             end
 
-            # # Mass linkage constraints
-            # for k in bad_mass_link_segments[n]
-            #     for con in mass_link_con[n][k]
-            #         delete(model, con)
-            #     end
-
-            #     mass_link_con[n][k] = if typeof(p.objective_config) == LoggedMassConfig 
-            #         [@constraint(model,
-            #             x[n][k][7, 1] == log(exp(p.x_nodes[n][k-1][7, end]) + p.Δm0[n][k]) + (1.0/(1.0 + p.Δm0[n][k]/exp(p.x_nodes[n][k-1][7, end])))*(x[n][k-1][7, end] - p.x_nodes[n][k-1][7, end])
-            #         )]
-            #     else
-            #         [@constraint(model,
-            #             x[n][k][7, 1] == x[n][k-1][7, end] + p.Δm0[n][k]
-            #         )]
-            #     end
-            # end
-
             # Mass linkage constraints
             for k in bad_mass_link_segments[n]
                 for con in mass_link_con[n][k]
                     delete(models[id_groups[n]], con)
+                end
+
+                time_indices = []
+
+                for l in collect(1:p.mixing_number)[id_groups .== id_groups[n]]
+                    for m in 1:length(p.id_journey[l])
+                        if p.id_journey[n][k] == p.id_journey[n][m]
+                            push!(time_indices, (l, m))
+                        end
+                    end
+                end
+
+                sort!(time_indices; by = x->p.times_journey[x[1]][x[2]])
+
+                Δm = if n == time_indices[1][1] && k == time_indices[1][2]
+                    -40/m_scale
+                else
+                    mining_rate*(actual_time[time_indices[2][1]][time_indices[2][2]] - actual_time[time_indices[1][1]][time_indices[1][2]])
                 end
 
                 mass_link_con[n][k] = if typeof(p.objective_config) == LoggedMassConfig 
@@ -599,8 +600,8 @@ function solve!(
                         x[n][k][7, 1] == log(exp(p.x_nodes[n][k-1][7, end]) + p.Δm0[n][k]) + (1.0/(1.0 + p.Δm0[n][k]/exp(p.x_nodes[n][k-1][7, end])))*(x[n][k-1][7, end] - p.x_nodes[n][k-1][7, end])
                     )]
                 else
-                    
                     [@constraint(models[id_groups[n]],
+                        # x[n][k][7, 1] == x[n][k-1][7, end] + Δm
                         x[n][k][7, 1] == x[n][k-1][7, end] + p.Δm0[n][k]
                     )]
                 end
@@ -785,7 +786,7 @@ function solve!(
         end
 
         if i >= 10
-            current_trust_region_factor = max(p.trust_region_factor * ((scp_iterations - i) / (scp_iterations - 10))^2.0, 5e-4)
+            current_trust_region_factor = max(p.trust_region_factor * ((scp_iterations - i) / (scp_iterations - 10))^2.0, 1e-4)
         end 
     end
 end
