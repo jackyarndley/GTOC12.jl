@@ -1373,7 +1373,6 @@ plot_trajectory_paper(p; rotating = false, plot_3d = false)
 
 plot_trajectory_paper(p; rotating = true, plot_3d = false)
 
-
 plot_trajectory_paper(p; rotating = true, plot_3d = true)
 
 
@@ -1388,7 +1387,7 @@ function plot_trajectory_paper(
     solution_indices = nothing,
     rotating = false
 )
-    f = Figure(size = (800, 500), backgroundcolor = :white, figure_padding = 10)
+    f = Figure(size = (800, 400), backgroundcolor = :white, figure_padding = 10)
 
     if isnothing(solution_indices)
         solution_indices = collect(1:p.mixing_number)
@@ -1411,11 +1410,25 @@ function plot_trajectory_paper(
             xlabel = "x [AU]", 
             ylabel = "y [AU]", 
             # limits = (2.2, 3.2, -0.5, 0.5),
-            limits = (-0.5, 3.2, -1.1, 1.1),
+            limits = (-0.5, 3.2, -1.5, 1.5),
+            yticks = [-1.0, 0.0, 1.0]
             # limits = (0.5, 1.5, -3.0, -2.0),
-            aspect = 1.87
+            # aspect = 3.7/3
+            # aspect = 1.32
         )
     end
+
+    ax2 = Axis(
+        f[1:2, 3]; 
+        xlabel = "x [AU]", 
+        ylabel = "y [AU]", 
+        # limits = (2.2, 3.2, -0.5, 0.5),
+        limits = (2.55, 3.05, -0.45, 0.45),
+        yticks = [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4],
+        # limits = (0.5, 1.5, -3.0, -2.0),
+        aspect = 0.5/0.9
+    )
+
 
     rotation_rate = if rotating
         visited_ids = setdiff(unique(stack(p.id_journey[solution_indices])), [0, -3])
@@ -1429,7 +1442,7 @@ function plot_trajectory_paper(
         0.0
     end
 
-    visited_angle = -1.26
+    visited_angle = -1.25
 
     # scatter!(ax1,
     #     [0.0],
@@ -1440,124 +1453,127 @@ function plot_trajectory_paper(
 
     # ν_plot = collect(LinRange(0.0, 2π, 400)) 
 
-    t_planet = convert_mjd_to_time.(collect(mjd_start:10:mjd_end))
+    for ax in [ax1, ax2]
 
-    for (i, planet_classical) in enumerate(eachcol(planets_classical))
-        # temp = repeat(planet_classical, 1, 400)
-        # temp[6, :] .= ν_plot
-        # temp = hcat(classical_to_cartesian.(eachcol(temp))...)
+        t_planet = convert_mjd_to_time.(collect(mjd_start:10:mjd_end))
 
-        # temp = 
+        for (i, planet_classical) in enumerate(eachcol(planets_classical))
+            # temp = repeat(planet_classical, 1, 400)
+            # temp[6, :] .= ν_plot
+            # temp = hcat(classical_to_cartesian.(eachcol(temp))...)
 
-        xp = integrate_trajectory(
-            planets_cartesian[:, i],
-            t_planet
-        )
+            # temp = 
 
-        if rotating
-            xp = stack(get_state_rotation_matrix.(2π*t_planet/rotation_rate .+ visited_angle).*eachcol(xp[1:6, :]))
+            xp = integrate_trajectory(
+                planets_cartesian[:, i],
+                t_planet
+            )
+
+            if rotating
+                xp = stack(get_state_rotation_matrix.(2π*t_planet/rotation_rate .+ visited_angle).*eachcol(xp[1:6, :]))
+            end
+
+            lines!(ax,
+                xp[1, :],
+                xp[2, :],
+                xp[3, :],
+                linestyle = :dashdot,
+                color = Makie.wong_colors()[[2, 1, 6][i]],
+                alpha = 0.35
+            )
         end
 
-        lines!(ax1,
-            xp[1, :],
-            xp[2, :],
-            xp[3, :],
-            linestyle = :dashdot,
-            color = Makie.wong_colors()[[2, 1, 6][i]],
-            alpha = 0.35
-        )
-    end
+        for n in solution_indices
+            for k in 1:p.segment_number[n]
+                x0 = p.x0[n][k]
+                xf = p.xf[n][k]
 
-    for n in solution_indices
-        for k in 1:p.segment_number[n]
-            x0 = p.x0[n][k]
-            xf = p.xf[n][k]
+                if rotating
+                    x0 = get_state_rotation_matrix(2π*(p.times_journey[n][k])/rotation_rate + visited_angle)*x0[1:6]
+                    xf = get_state_rotation_matrix(2π*(p.times_journey[n][k+1])/rotation_rate + visited_angle)*xf[1:6]
+                end
 
-            if rotating
-                x0 = get_state_rotation_matrix(2π*(p.times_journey[n][k])/rotation_rate + visited_angle)*x0[1:6]
-                xf = get_state_rotation_matrix(2π*(p.times_journey[n][k+1])/rotation_rate + visited_angle)*xf[1:6]
-            end
-
-            scatter!(ax1,
-                x0[1],
-                x0[2],
-                x0[3],
-            )
-
-            if k == p.segment_number[n]
-                scatter!(ax1,
-                    xf[1],
-                    xf[2],
-                    xf[3],
+                scatter!(ax,
+                    x0[1],
+                    x0[2],
+                    x0[3],
                 )
+
+                if k == p.segment_number[n]
+                    scatter!(ax,
+                        xf[1],
+                        xf[2],
+                        xf[3],
+                    )
+                end
+
+                t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
+
+                if !(t_fine[end] ≈ p.t_nodes[n][k][end])
+                    push!(t_fine, p.t_nodes[n][k][end])
+                end
+
+                x_fine = integrate_trajectory(
+                    p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+                    t_fine;
+                    t_nodes = p.t_nodes[n][k],
+                    u_nodes = p.u_nodes[n][k],
+                    p.objective_config,
+                )
+
+                x_target_fine = integrate_trajectory(
+                    ephermeris_cartesian_from_id(p.id_journey[n][k + 1], p.times_journey[n][k])[:],
+                    t_fine
+                )
+
+                if rotating
+                    rotation_matrix = get_state_rotation_matrix.(2π*(t_fine .+ p.times_journey[n][k])/rotation_rate .+ visited_angle)
+
+                    x_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_fine[1:6, :]))
+
+                    x_target_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_target_fine[1:6, :]))
+                end
+
+                lines!(ax,
+                    x_fine[1, :],
+                    x_fine[2, :],
+                    x_fine[3, :],
+                    color = :black
+                )
+
+                lines!(ax,
+                    x_target_fine[1, :],
+                    x_target_fine[2, :],
+                    x_target_fine[3, :],
+                    alpha = 0.2,
+                    color = :black
+                )
+
+
+                # thrust_force = if p.objective_config == LoggedMassConfig()
+                #     temp = exp.(p.x_nodes[n][k][7, 1:end-1])
+                #     p.u_nodes[n][k][4, :] .* temp * thrust * m_scale * a_scale * 1e3
+                # else
+                #     p.u_nodes[n][k][4, :] * thrust * m_scale * a_scale * 1e3
+                # end
+
+                # sel = thrust_force .>= 0.01
+
+                # thrust_vectors = stack(normalize.(eachcol(p.u_nodes[n][k][1:3, :]))).*thrust_force'
+
+                # length_scale = 0.2
+
+                # for i in collect(1:length(thrust_force))[sel]
+                #     lines!(ax1,
+                #         [p.x_nodes[n][k][1, i], p.x_nodes[n][k][1, i] + length_scale*thrust_vectors[1, i]],
+                #         [p.x_nodes[n][k][2, i], p.x_nodes[n][k][2, i] + length_scale*thrust_vectors[2, i]],
+                #         [p.x_nodes[n][k][3, i], p.x_nodes[n][k][3, i] + length_scale*thrust_vectors[3, i]],
+                #         color = :black,
+                #         alpha = 0.5,
+                #         linewidth = 1,
+                #     )
+                # end
             end
-
-            t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
-
-            if !(t_fine[end] ≈ p.t_nodes[n][k][end])
-                push!(t_fine, p.t_nodes[n][k][end])
-            end
-
-            x_fine = integrate_trajectory(
-                p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
-                t_fine;
-                t_nodes = p.t_nodes[n][k],
-                u_nodes = p.u_nodes[n][k],
-                p.objective_config,
-            )
-
-            x_target_fine = integrate_trajectory(
-                ephermeris_cartesian_from_id(p.id_journey[n][k + 1], p.times_journey[n][k])[:],
-                t_fine
-            )
-
-            if rotating
-                rotation_matrix = get_state_rotation_matrix.(2π*(t_fine .+ p.times_journey[n][k])/rotation_rate .+ visited_angle)
-
-                x_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_fine[1:6, :]))
-
-                x_target_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_target_fine[1:6, :]))
-            end
-
-            lines!(ax1,
-                x_fine[1, :],
-                x_fine[2, :],
-                x_fine[3, :],
-                color = :black
-            )
-
-            lines!(ax1,
-                x_target_fine[1, :],
-                x_target_fine[2, :],
-                x_target_fine[3, :],
-                alpha = 0.2,
-                color = :black
-            )
-
-
-            # thrust_force = if p.objective_config == LoggedMassConfig()
-            #     temp = exp.(p.x_nodes[n][k][7, 1:end-1])
-            #     p.u_nodes[n][k][4, :] .* temp * thrust * m_scale * a_scale * 1e3
-            # else
-            #     p.u_nodes[n][k][4, :] * thrust * m_scale * a_scale * 1e3
-            # end
-
-            # sel = thrust_force .>= 0.01
-
-            # thrust_vectors = stack(normalize.(eachcol(p.u_nodes[n][k][1:3, :]))).*thrust_force'
-
-            # length_scale = 0.2
-
-            # for i in collect(1:length(thrust_force))[sel]
-            #     lines!(ax1,
-            #         [p.x_nodes[n][k][1, i], p.x_nodes[n][k][1, i] + length_scale*thrust_vectors[1, i]],
-            #         [p.x_nodes[n][k][2, i], p.x_nodes[n][k][2, i] + length_scale*thrust_vectors[2, i]],
-            #         [p.x_nodes[n][k][3, i], p.x_nodes[n][k][3, i] + length_scale*thrust_vectors[3, i]],
-            #         color = :black,
-            #         alpha = 0.5,
-            #         linewidth = 1,
-            #     )
-            # end
         end
     end
 
