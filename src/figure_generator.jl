@@ -26,7 +26,7 @@ times_journey = [
 
 
 
-scp_iterations = 40
+scp_iterations = 80
 
 node_time_spacing = 20.0*day_scale
 
@@ -590,6 +590,17 @@ end
 
 
 
+mip_problem.solutions = 50
+
+plot_graph_structure(
+    mip_problem;
+    plot_pruned = true,
+    plot_optimal_path = true,
+    output_file = "output/plots/bip_big.png",
+    figure_size = (800, 450)
+)
+
+
 function plot_graph_structure(
     p::MixedIntegerProblem;
     plot_optimal_path = false,
@@ -604,6 +615,8 @@ function plot_graph_structure(
     stage_Δx = 0.1
     node_Δy = 0.05
 
+    used_edge_expansion = 0.2
+
     unused_edge_list = []
 
     used_edge_lists = [[] for _ in 1:p.solutions]
@@ -614,7 +627,9 @@ function plot_graph_structure(
     layout = []
 
     # color_range = ColorSchemes.tab10
-    color_range = ColorSchemes.tableau_10
+    # color_range = ColorSchemes.tableau_10
+    # color_range = ColorSchemes.tableau_10
+    color_range = get(colorschemes[:inferno], LinRange(1.0, 0.0, 50))
     # color_range = ColorSchemes.tableau_jewel_bright
     # color_range = ColorSchemes.tableau_miller_stone
 
@@ -638,7 +653,7 @@ function plot_graph_structure(
                             used_check = true
 
                             for l in temp
-                                used_edge_widths[l][end] += 3
+                                used_edge_widths[l][end] += used_edge_expansion
                             end
 
                             push!(used_edge_lists[k], (i + stage_size*(stage-1), j + stage_size*stage))
@@ -672,7 +687,7 @@ function plot_graph_structure(
                         used_check = true
 
                         for l in temp
-                            used_edge_widths[l][end] += 3
+                            used_edge_widths[l][end] += used_edge_expansion
                         end
                     
                         push!(used_edge_lists[k], (collection_offset - stage_size + i, collection_offset + j))
@@ -710,7 +725,7 @@ function plot_graph_structure(
                             used_check = true
 
                             for l in temp
-                                used_edge_widths[l][end] += 3
+                                used_edge_widths[l][end] += used_edge_expansion
                             end
                         
                             push!(used_edge_lists[k], (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
@@ -739,6 +754,7 @@ function plot_graph_structure(
 
     ax = Axis(
         f[1, 1];
+        width = figure_size[1]
         # size = (800, 800),
     )
 
@@ -812,6 +828,11 @@ function plot_graph_structure(
     xlims!(ax, [-stage_Δx*0.2, stage_Δx*(p.deployment_nums[selection_index] + p.collection_arcs[selection_index] + 1) + stage_Δx*0.2])
     ylims!(ax, [-node_Δy*(length(p.id_subset) - 0.5), node_Δy*0.5])
     
+    Colorbar(f[2, 1], limits = (0, 50), labelsize=16, colormap = color_range, vertical = false, flipaxis = false, width = 0.9*figure_size[1], label = "BIP solution rank")
+
+    # , limits = (-1, 1), colormap = :heat,
+    # label = "Temperature", vertical = false, flipaxis = false,
+    # highclip = :cyan, lowclip = :red)
 
     # resize_to_layout!(f)
     display(f)
@@ -964,17 +985,21 @@ end
 
 function plot_convergence_comparison(
     mip_problem_objectives, 
-    scp_problem_objectives
+    scp_problem_objectives;
+    output_file = nothing
 )
 
-    f = Figure(size = (800, 400), backgroundcolor = :white)
+    f = Figure(size = (800, 300), backgroundcolor = :white)
 
     cs = ColorSchemes.tableau_10
     
     ax = Axis(
         f[1, 1]; 
-        xlabel = "BIP problem index", 
-        ylabel = "SCP problem objective kg", 
+        xlabel = "BIP solution rank", 
+        ylabel = "SCP per ship mass [kg]", 
+        xticks = 0:5:50,
+        limits = (0, 51, 720, 790)
+        # xticks = 0:10:50
     )
 
     for i in 1:length(mip_problem_objectives)
@@ -985,14 +1010,14 @@ function plot_convergence_comparison(
         )
     end
 
-    f[1, 2] = Legend(f, ax, framevisible = false, unique = true, merge = true, labelsize=16)
+    axislegend(ax, unique = true, merge = true, orientation = :horizontal)
 
     resize_to_layout!(f)
     display(f)
 
-    # if !isnothing(output_file)
-    #     save(output_file, f)
-    # end
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
 
     return
 end
@@ -1091,13 +1116,21 @@ plot_graph_structure(
 
 
 
-id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])
+# id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])
 # id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
-# id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
+id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
 
 
 mip_problem = MixedIntegerProblem(id_subset, [10], [10])
-mip_problem.cost_limit = 10/v_scale
+mip_problem.cost_limit = 6/v_scale
+
+
+
+mip_problem.cost_limit = 8/v_scale
+
+
+
+
 
 
 join([@sprintf("%5s ", val) for val in id_subset])
@@ -1116,7 +1149,7 @@ scp_problem_objectives = Vector{Float64}[]
 
 
 
-solution_number = 20
+solution_number = 50
 
 
 solve!(mip_problem;
@@ -1139,7 +1172,7 @@ scp_problem = SequentialConvexProblem(
     dynamical_error = 1e-4
 );
 
-solve!(scp_problem)
+@time solve!(scp_problem)
 
 
 
@@ -1150,7 +1183,8 @@ push!(scp_problem_objectives, [-m_scale*scp_problem.Δm0[n][end] for n in 1:scp_
 
 plot_convergence_comparison(
     [collect(1:min(solution_number, length(mip_problem_objectives[i]))) for i in 1:length(mip_problem_objectives)],
-    scp_problem_objectives
+    scp_problem_objectives;
+    output_file = "output/plots/nested_loop_progress.png"
 )
 
 # plot_convergence_comparison(
@@ -1181,12 +1215,14 @@ plot_trajectory(scp_problem; solution_indices = [1], plot_3d = false, rotating =
 
 
 
+mip_problem.solutions = 40
+
 plot_graph_structure(
     mip_problem;
     plot_pruned = true,
     plot_optimal_path = true,
     output_file = "output/plots/bip_big.png",
-    figure_size = (900, 500)
+    figure_size = (800, 400)
 )
 
 
@@ -1365,15 +1401,15 @@ p = SequentialConvexProblem(
 solve!(p)
 
 
-plot_thrust_profile_paper(p)
+plot_thrust_profile_paper(p; output_file = "output/plots/individual_profile.png")
 
 
 
-plot_trajectory_paper(p; rotating = false, plot_3d = false)
+# plot_trajectory_paper(p; rotating = false, plot_3d = false)
 
-plot_trajectory_paper(p; rotating = true, plot_3d = false)
+plot_trajectory_paper(p; rotating = true, plot_3d = false, output_file = "output/plots/individual_trajectory.png")
 
-plot_trajectory_paper(p; rotating = true, plot_3d = true)
+# plot_trajectory_paper(p; rotating = true, plot_3d = true)
 
 
 
@@ -1385,9 +1421,10 @@ function plot_trajectory_paper(
     p::SequentialConvexProblem;
     plot_3d = false,
     solution_indices = nothing,
-    rotating = false
+    rotating = false,
+    output_file = nothing
 )
-    f = Figure(size = (800, 400), backgroundcolor = :white, figure_padding = 10)
+    f = Figure(size = (800, 650), backgroundcolor = :white, figure_padding = 2)
 
     if isnothing(solution_indices)
         solution_indices = collect(1:p.mixing_number)
@@ -1395,7 +1432,7 @@ function plot_trajectory_paper(
 
     ax1 = if plot_3d
         Axis3(
-            f[1:2, 1:2]; 
+            f[1:10, 1]; 
             xlabel = "x [AU]", 
             ylabel = "y [AU]", 
             zlabel = "z [AU]", 
@@ -1406,28 +1443,54 @@ function plot_trajectory_paper(
         )
     else
         Axis(
-            f[1:2, 1:2]; 
-            xlabel = "x [AU]", 
+            f[1:10, 1]; 
+            # xlabel = "x [AU]", 
             ylabel = "y [AU]", 
             # limits = (2.2, 3.2, -0.5, 0.5),
-            limits = (-0.5, 3.2, -1.5, 1.5),
-            yticks = [-1.0, 0.0, 1.0]
+            limits = (-0.25, 3.2, -1.1, 1.1),
+            xticks = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+            yticks = [-1.0, -0.5, 0.0, 0.5, 1.0],
+            xticklabelsvisible = false,
             # limits = (0.5, 1.5, -3.0, -2.0),
             # aspect = 3.7/3
-            # aspect = 1.32
+            # aspect = 1.568
         )
     end
 
-    ax2 = Axis(
-        f[1:2, 3]; 
+    # ax2 = Axis(
+    #     f[1:2, 3]; 
+    #     xlabel = "x [AU]", 
+    #     ylabel = "y [AU]", 
+    #     # limits = (2.2, 3.2, -0.5, 0.5),
+    #     limits = (2.55, 3.05, -0.45, 0.45),
+    #     yticks = [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4],
+    #     # limits = (0.5, 1.5, -3.0, -2.0),
+    #     aspect = 0.5/0.9
+    # )
+
+    ax3 = Axis(
+        f[11:14, 1]; 
         xlabel = "x [AU]", 
-        ylabel = "y [AU]", 
+        ylabel = "z [AU]", 
         # limits = (2.2, 3.2, -0.5, 0.5),
-        limits = (2.55, 3.05, -0.45, 0.45),
-        yticks = [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4],
+        limits = (-0.25, 3.2, -0.35, 0.35),
+        xticks = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+        yticks = [-0.2, 0.0, 0.2],
         # limits = (0.5, 1.5, -3.0, -2.0),
-        aspect = 0.5/0.9
+        # aspect = 3.7/3
+        # aspect = 1.32
     )
+
+    # ax4 = Axis(
+    #     f[3, 3]; 
+    #     xlabel = "x [AU]", 
+    #     ylabel = "z [AU]", 
+    #     # limits = (2.2, 3.2, -0.5, 0.5),
+    #     limits = (2.55, 3.05, -0.3, 0.3),
+    #     # yticks = [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4],
+    #     # limits = (0.5, 1.5, -3.0, -2.0),
+    #     # aspect = 0.5/0.9
+    # )
 
 
     rotation_rate = if rotating
@@ -1453,7 +1516,7 @@ function plot_trajectory_paper(
 
     # ν_plot = collect(LinRange(0.0, 2π, 400)) 
 
-    for ax in [ax1, ax2]
+    for (ax, order) in zip([ax1, ax3], [[1, 2, 3], [1, 3, 2]])
 
         t_planet = convert_mjd_to_time.(collect(mjd_start:10:mjd_end))
 
@@ -1474,12 +1537,13 @@ function plot_trajectory_paper(
             end
 
             lines!(ax,
-                xp[1, :],
-                xp[2, :],
-                xp[3, :],
+                xp[order[1], :],
+                xp[order[2], :],
+                xp[order[3], :],
                 linestyle = :dashdot,
                 color = Makie.wong_colors()[[2, 1, 6][i]],
-                alpha = 0.35
+                alpha = 0.35,
+                label = ["Venus Orbit", "Earth Orbit", "Mars Orbit"][i]
             )
         end
 
@@ -1494,16 +1558,16 @@ function plot_trajectory_paper(
                 end
 
                 scatter!(ax,
-                    x0[1],
-                    x0[2],
-                    x0[3],
+                    x0[order[1]],
+                    x0[order[2]],
+                    x0[order[3]],
                 )
 
                 if k == p.segment_number[n]
                     scatter!(ax,
-                        xf[1],
-                        xf[2],
-                        xf[3],
+                        xf[order[1]],
+                        xf[order[2]],
+                        xf[order[3]],
                     )
                 end
 
@@ -1535,16 +1599,16 @@ function plot_trajectory_paper(
                 end
 
                 lines!(ax,
-                    x_fine[1, :],
-                    x_fine[2, :],
-                    x_fine[3, :],
+                    x_fine[order[1], :],
+                    x_fine[order[2], :],
+                    x_fine[order[3], :],
                     color = :black
                 )
 
                 lines!(ax,
-                    x_target_fine[1, :],
-                    x_target_fine[2, :],
-                    x_target_fine[3, :],
+                    x_target_fine[order[1], :],
+                    x_target_fine[order[2], :],
+                    x_target_fine[order[3], :],
                     alpha = 0.2,
                     color = :black
                 )
@@ -1578,7 +1642,7 @@ function plot_trajectory_paper(
     end
 
 
-
+    axislegend(ax1, merge = true, unique = true, orientation = :horizontal)
     
 
     # hidedecorations!(
@@ -1588,6 +1652,10 @@ function plot_trajectory_paper(
     resize_to_layout!(f)
     display(f)
 
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
     return
 end
 
@@ -1596,7 +1664,7 @@ end
 
 
 function plot_thrust_profile_paper(
-    p::SequentialConvexProblem,
+    p::SequentialConvexProblem;
     output_file = nothing
 )
     f = Figure(size = (800, 200), backgroundcolor = :white, figure_padding = 5)
@@ -1607,6 +1675,7 @@ function plot_thrust_profile_paper(
     mixing = length(p.x0)
     
     n = 1
+    i = 1
 
     deployments = sum(p.Δm0[n] .≈ -40/m_scale)
 
@@ -1808,7 +1877,7 @@ function plot_team_improvements(
             color=:black,
             alpha=0.75,
             linewidth=2,
-            label=false
+            # label=""
         )
 
         for (mass, color) in zip(improved_mass, colors)
@@ -1816,14 +1885,17 @@ function plot_team_improvements(
                 [mass, mass], 
                 [y_position-0.18, y_position+0.18],
                 color=cs[color],
+                label= ["Self-cleaning", "Mixed"][color],
                 alpha=0.75,
                 linewidth=2,
-                label=false
+                # label=false
             )
         end
 
         push!(axs, ax)
     end
+
+    axislegend(ax, merge = true, unique = true, orientation = :horizontal)
 
     linkxaxes!(axs...)
     resize_to_layout!(f)
