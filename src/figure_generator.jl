@@ -203,7 +203,7 @@ id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 5
 
 
 mip_problem = MixedIntegerProblem(id_subset, [10], [10])
-mip_problem.cost_limit = 6/v_scale
+mip_problem.cost_limit = 10/v_scale
 # mip_problem.cost_limit = 8/v_scale
 
 
@@ -226,7 +226,7 @@ scp_problem_objectives = Vector{Float64}[]
 
 
 
-solution_number = 26
+solution_number = 50
 
 
 solve!(mip_problem;
@@ -276,7 +276,7 @@ mip_problem = MixedIntegerProblem(id_subset, [10], [10];
     times_journey = [scp_problem.times_journey[argmax(scp_problem_objectives[end])]]
 )
 
-mip_problem.cost_limit = 10/v_scale
+mip_problem.cost_limit = 6/v_scale
 
 
 
