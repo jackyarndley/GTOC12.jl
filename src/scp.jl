@@ -581,7 +581,7 @@ function solve!(
 
                 for l in collect(1:p.mixing_number)[id_groups .== id_groups[n]]
                     for m in 1:length(p.id_journey[l])
-                        if p.id_journey[n][k] == p.id_journey[n][m]
+                        if p.id_journey[n][k] == p.id_journey[l][m]
                             push!(time_indices, (l, m))
                         end
                     end
@@ -658,6 +658,10 @@ function solve!(
                 Max, 
                 objective[i]
             )
+
+            # display(models[i])
+
+            # display(sum(num_constraints(models[i], F, S) for (F, S) in list_of_constraint_types(models[i])))
 
             JuMP.optimize!(models[i])
         end
