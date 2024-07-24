@@ -2152,29 +2152,29 @@ function plot_trajectory_final(
     f = Figure(size = (800, 550), backgroundcolor = :white, figure_padding = 2)
 
     ax1 = Axis(
-        f[1:10, 1]; 
-        # xlabel = "x [AU]", 
+        f[1:4, 1]; 
+        xlabel = "x [AU]", 
         ylabel = "y [AU]", 
         limits = (-3.2, 3.2, -3.2, 3.2),
         # limits = (-0.25, 3.2, -1.1, 1.1),
         # xticks = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
         # yticks = [-1.0, -0.5, 0.0, 0.5, 1.0],
-        xticklabelsvisible = false,
+        # xticklabelsvisible = false,
         # limits = (0.5, 1.5, -3.0, -2.0),
         # aspect = 3.7/3
         # aspect = 1.568
     )
 
     ax2 = Axis(
-        f[1:10, 2]; 
-        # xlabel = "x [AU]", 
+        f[1:4, 2]; 
+        xlabel = "x [AU]", 
         # ylabel = "y [AU]", 
         limits = (-3.2, 3.2, -3.2, 3.2),
         # limits = (2.2, 3.2, -0.5, 0.5),
         # limits = (-0.25, 3.2, -1.1, 1.1),
         # xticks = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
         # yticks = [-1.0, -0.5, 0.0, 0.5, 1.0],
-        xticklabelsvisible = false,
+        # xticklabelsvisible = false,
         yticklabelsvisible = false,
         # limits = (0.5, 1.5, -3.0, -2.0),
         # aspect = 3.7/3
@@ -2182,10 +2182,10 @@ function plot_trajectory_final(
     )
 
     ax3 = Axis(
-        f[11:14, 1]; 
-        xlabel = "x [AU]", 
-        ylabel = "z [AU]", 
-        limits = (-3.2, 3.2, -0.5, 0.5),
+        f[5, 1]; 
+        xlabel = "ship ID", 
+        ylabel = "rendezvous number", 
+        # limits = (-3.2, 3.2, -0.5, 0.5),
         # limits = (2.2, 3.2, -0.5, 0.5),
         # limits = (-0.25, 3.2, -0.35, 0.35),
         # xticks = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
@@ -2197,10 +2197,10 @@ function plot_trajectory_final(
     )
 
     ax4 = Axis(
-        f[11:14, 2]; 
-        xlabel = "x [AU]", 
+        f[5, 2]; 
+        xlabel = "ship ID", 
         yticklabelsvisible = false,
-        limits = (-3.2, 3.2, -0.5, 0.5),
+        # limits = (-3.2, 3.2, -0.5, 0.5),
         # ylabel = "z [AU]", 
         # limits = (2.2, 3.2, -0.5, 0.5),
         # limits = (-0.25, 3.2, -0.35, 0.35),
@@ -2235,7 +2235,7 @@ function plot_trajectory_final(
 
     # ν_plot = collect(LinRange(0.0, 2π, 400)) 
 
-    for (ax, order, p) in zip([ax1, ax2, ax3, ax4], [[1, 2, 3], [1, 2, 3], [1, 3, 2], [1, 3, 2]], [p1, p2, p1, p2])
+    for (ax, ax_aux, order, p) in zip([ax1, ax2], [ax3, ax4], [[1, 2, 3], [1, 2, 3]], [p1, p2])
         
         solution_indices = collect(1:p.mixing_number)
 
@@ -2252,7 +2252,7 @@ function plot_trajectory_final(
                 temp[order[1], :],
                 temp[order[2], :],
                 temp[order[3], :],
-                linestyle = :dashdot,
+                # linestyle = :dashdot,
                 color = Makie.wong_colors()[[2, 1, 6][i]]
             )
         end
@@ -2262,10 +2262,10 @@ function plot_trajectory_final(
                 x0 = p.x0[n][k]
                 xf = p.xf[n][k]
 
-                if rotating
-                    x0 = get_state_rotation_matrix(2π*(p.times_journey[n][k])/rotation_rate + visited_angle)*x0[1:6]
-                    xf = get_state_rotation_matrix(2π*(p.times_journey[n][k+1])/rotation_rate + visited_angle)*xf[1:6]
-                end
+                # if rotating
+                #     x0 = get_state_rotation_matrix(2π*(p.times_journey[n][k])/rotation_rate + visited_angle)*x0[1:6]
+                #     xf = get_state_rotation_matrix(2π*(p.times_journey[n][k+1])/rotation_rate + visited_angle)*xf[1:6]
+                # end
 
                 scatter!(ax,
                     x0[order[1]],
@@ -2304,15 +2304,15 @@ function plot_trajectory_final(
                 #     zeros(6, 0)
                 # end
 
-                if rotating
-                    rotation_matrix = get_state_rotation_matrix.(2π*(t_fine .+ p.times_journey[n][k])/rotation_rate .+ visited_angle)
+                # if rotating
+                #     rotation_matrix = get_state_rotation_matrix.(2π*(t_fine .+ p.times_journey[n][k])/rotation_rate .+ visited_angle)
 
-                    x_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_fine[1:6, :]))
+                #     x_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_fine[1:6, :]))
 
-                    # if p.id_journey[n][k + 1] != -3
-                    #     x_target_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_target_fine[1:6, :]))
-                    # end
-                end
+                #     # if p.id_journey[n][k + 1] != -3
+                #     #     x_target_fine[1:6, :] = stack(rotation_matrix.*eachcol(x_target_fine[1:6, :]))
+                #     # end
+                # end
 
                 lines!(ax,
                     x_fine[order[1], :],
@@ -2356,6 +2356,53 @@ function plot_trajectory_final(
                 # end
             end
         end
+
+        # display(p.id_journey)
+
+        # temp = vcat([fill(i, length(k) - 2) for (i, k) in enumerate(p.id_journey)]...)
+
+        # display(temp)
+
+        # colors = vcat([
+        #     [count(==(j), k[2:end-1]) for j in k[2:end-1]]
+        #     for k in p.id_journey
+        # ]...)
+
+        # display(colors)
+
+
+        # barplot!(ax_aux,
+        #     temp,
+        #     fill(1, length(temp)),
+        #     stack = colors,
+        #     color = Makie.wong_colors()[[2, 1]][colors]
+        # )
+
+        
+        temp = vcat([fill(i, 2) for (i, k) in enumerate(p.id_journey)]...)
+
+        display(temp)
+
+        temp2 = [[count(==(j), k[2:end-1]) for j in k[2:end-1]] for k in p.id_journey]
+
+        heights = vcat(
+            [vcat(count(==(1), k), count(==(2), k)) for k in temp2]...
+        )
+
+        colors = vcat([[1, 2] for (i, k) in enumerate(p.id_journey)]...)
+
+
+        barplot!(ax_aux,
+            temp,
+            heights,
+            stack = colors,
+            color = ColorSchemes.tab10[[2, 1]][colors]
+        )
+
+
+
+
+
     end
 
 
@@ -2366,6 +2413,251 @@ function plot_trajectory_final(
     #     ax1
     # )
 
+    resize_to_layout!(f)
+    display(f)
+
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
+    return
+end
+
+
+function plot_trajectory_and_thrust_profile_paper(
+    p::SequentialConvexProblem;
+    output_file = nothing,
+    solution_indices = nothing,
+    label_text = ""
+)
+
+    f = Figure(size = (800, 550), backgroundcolor = :white, figure_padding = 2)
+
+    if isnothing(solution_indices)
+        solution_indices = collect(1:p.mixing_number)
+    end
+    
+    cs = ColorSchemes.tab20
+    # cs = ColorSchemes.tableau_miller_stone
+
+    for i in 1:p.mixing_number
+
+        ax1 = Axis(
+            f[1:4, i]; 
+            xlabel = "x [AU]", 
+            ylabel = i==1 ? "y [AU]" : "", 
+            limits = (-3.2, 3.2, -3.2, 3.2),
+            # limits = (-0.25, 3.2, -1.1, 1.1),
+            # xticks = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+            # yticks = [-1.0, -0.5, 0.0, 0.5, 1.0],
+            yticklabelsvisible = i==1,
+            # limits = (0.5, 1.5, -3.0, -2.0),
+            # aspect = 3.7/3
+            # aspect = 1.0
+        )
+
+        ax2 = Axis(
+            f[5, i]; 
+            xlabel = "time [MJD]", 
+            # xticksvisible = false,
+            # xticklabelsvisible = false,
+            yticklabelsvisible = i==1,
+            ylabel = i==1 ? "thrust" : "", 
+            xticks = [65000, 66000, 67000, 68000, 69000],
+            yticks = ([0.0, 0.6], ["0.0", "max"]),
+            xgridvisible = false,
+            limits = (mjd_start, mjd_end, -0.05, 0.65)
+        )
+
+        # scatter!(ax1,
+        #     [0.0],
+        #     [0.0],
+        #     [0.0],
+        #     color = :black
+        # )
+
+        ν_plot = collect(LinRange(0.0, 2π, 400)) 
+
+        for (i, planet_classical) in enumerate(eachcol(planets_classical))
+            temp = repeat(planet_classical, 1, 400)
+            temp[6, :] .= ν_plot
+            temp = hcat(classical_to_cartesian.(eachcol(temp))...)
+
+            lines!(ax1,
+                temp[1, :],
+                temp[2, :],
+                temp[3, :],
+                # linestyle = :dashdot,
+                color = Makie.wong_colors()[[2, 1, 6][i]],
+                # alpha = 0.35,
+                label = ["Venus Orbit", "Earth Orbit", "Mars Orbit"][i]
+            )
+        end
+
+        for n in [i]
+            temp = deepcopy(p.id_journey[n])
+            temp[1] = -3
+
+            chosen_colors = cs[[findfirst(==(i), temp) for i in temp]]
+
+            for k in 1:p.segment_number[n]
+                x0 = p.x0[n][k]
+                xf = p.xf[n][k]
+
+                t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
+
+                if !(t_fine[end] ≈ p.t_nodes[n][k][end])
+                    push!(t_fine, p.t_nodes[n][k][end])
+                end
+
+                x_fine = integrate_trajectory(
+                    p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+                    t_fine;
+                    t_nodes = p.t_nodes[n][k],
+                    u_nodes = p.u_nodes[n][k],
+                    p.objective_config,
+                )
+
+                lines!(ax1,
+                    x_fine[1, :],
+                    x_fine[2, :],
+                    x_fine[3, :],
+                    color = :black,
+                    alpha = 0.8,
+                )
+                
+                scatter!(ax1,
+                    x0[1],
+                    x0[2],
+                    x0[3],
+                    color = chosen_colors[k],
+                    markersize = 10,
+                )
+
+                if k == p.segment_number[n]
+                    scatter!(ax1,
+                        xf[1],
+                        xf[2],
+                        xf[3],
+                        color = chosen_colors[k+1],
+                        markersize = 10,
+                    )
+                end
+
+                # lines!(ax1,
+                #     x_target_fine[1, :],
+                #     x_target_fine[2, :],
+                #     x_target_fine[3, :],
+                #     alpha = 0.2,
+                #     color = :black
+                # )
+
+                thrust_force = if p.objective_config == LoggedMassConfig()
+                    temp = exp.(p.x_nodes[n][k][7, 1:end-1])
+                    p.u_nodes[n][k][4, :] .* temp * thrust * m_scale * a_scale * 1e3
+                else
+                    p.u_nodes[n][k][4, :] * thrust * m_scale * a_scale * 1e3
+                end
+
+                sel = thrust_force .>= 0.01
+
+                thrust_vectors = stack(normalize.(eachcol(p.u_nodes[n][k][1:3, :]))).*thrust_force'
+
+                length_scale = 0.2
+
+                for i in collect(1:length(thrust_force))[sel]
+                    lines!(ax1,
+                        [p.x_nodes[n][k][1, i], p.x_nodes[n][k][1, i] + length_scale*thrust_vectors[1, i]],
+                        [p.x_nodes[n][k][2, i], p.x_nodes[n][k][2, i] + length_scale*thrust_vectors[2, i]],
+                        [p.x_nodes[n][k][3, i], p.x_nodes[n][k][3, i] + length_scale*thrust_vectors[3, i]],
+                        color = :black,
+                        alpha = 0.5,
+                        linewidth = 1,
+                    )
+                end
+            end
+
+                
+            deployments = sum(p.Δm0[n] .≈ -40/m_scale)
+
+            m_fuel = if typeof(p.objective_config) == LoggedMassConfig
+                m_scale*exp(p.x_nodes[n][1][7, 1]) - 500.0 - 40.0*deployments - (m_scale*exp(p.x_nodes[n][end][7, end]) - 500.0 + m_scale*p.Δm0[n][end])
+            else
+                m_scale*p.x_nodes[n][1][7, 1] - 500.0 - 40.0*deployments - (m_scale*p.x_nodes[n][end][7, end] - 500.0 + m_scale*p.Δm0[n][end])
+            end
+
+            m_returned = -m_scale*p.Δm0[n][end]
+
+            t_nodes_combined = vcat(
+                [p.t_nodes[n][k][1:end-1] .+ p.times_journey[n][k] for k in 1:length(p.x0[n])]...
+            )
+            u_nodes_combined = hcat(p.u_nodes[n]...)
+            x_nodes_combined = hcat([val[:, 1:end-1] for val in p.x_nodes[n]]...)
+
+            push!(t_nodes_combined, p.times_journey[end][end])
+            u_nodes_combined = hcat(u_nodes_combined, p.u_nodes[end][end][:, end])
+            x_nodes_combined = hcat(x_nodes_combined, p.x_nodes[end][end][:, end])
+
+            thrust_force = if p.objective_config == LoggedMassConfig()
+                temp = exp.(x_nodes_combined[7, :])
+                u_nodes_combined[4, :] .* temp * thrust * m_scale * a_scale * 1e3
+            else
+                u_nodes_combined[4, :] * thrust * m_scale * a_scale * 1e3
+            end
+
+            stairs!(
+                ax2, 
+                convert_time_to_mjd(t_nodes_combined), 
+                thrust_force;
+                step = :post,
+                color = :black,
+                linewidth = 1.5,
+            )
+        
+            
+            vlines!(
+                ax2,
+                convert_time_to_mjd(p.times_journey[n][1]),
+                color = cs[1],
+                linewidth = 2,
+                alpha = 0.9
+            )
+        
+            
+            vlines!(
+                ax2,
+                convert_time_to_mjd(p.times_journey[n][end]),
+                color = cs[1],
+                linewidth = 2,
+                alpha = 0.9
+            )
+        
+            vlines!(
+                ax2,
+                convert_time_to_mjd(p.times_journey[n][2:(end-1)]),
+                color = chosen_colors[2:end-1],
+                linewidth = 2,
+                alpha = 0.9
+            )
+        end
+    end
+
+
+
+
+    # Label(
+    #     f[1:4, 3], 
+    #     label_text, 
+    #     # font = :italic, 
+    #     width = 150,
+    #     justification = :left,
+    #     padding = (-50, 0, 0, 0)
+    # )
+
+
+    # axislegend(ax1, merge = true, unique = true, orientation = :horizontal)
+
+    # linkxaxes!(axs...)
     resize_to_layout!(f)
     display(f)
 

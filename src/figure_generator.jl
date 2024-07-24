@@ -276,7 +276,7 @@ mip_problem = MixedIntegerProblem(id_subset, [10], [10];
     times_journey = [scp_problem.times_journey[argmax(scp_problem_objectives[end])]]
 )
 
-mip_problem.cost_limit = 6/v_scale
+mip_problem.cost_limit = 10/v_scale
 
 
 
@@ -477,7 +477,7 @@ plot_team_improvements(
 
 
 
-scp_iterations = 40
+scp_iterations = 80
 
 node_time_spacing = 20.0*day_scale
 
@@ -507,6 +507,11 @@ plot_trajectory_paper(p; rotating = true, plot_3d = false, output_file = "output
 
 # plot_trajectory_paper(p; rotating = true, plot_3d = true)
 
+plot_trajectory_and_thrust_profile_paper(
+    p;
+    label_text = "Ship 1:\n10 deployments\n10 collections\n781.41 kg returned",
+    output_file = "output/plots/individual_trajectory.png"
+)
 
 
 
@@ -517,20 +522,20 @@ plot_trajectory_paper(p; rotating = true, plot_3d = false, output_file = "output
 
 id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
 
-mip_problem = MixedIntegerProblem(id_subset, [9, 9], [9, 9])
+mip_problem = MixedIntegerProblem(id_subset, [9, 8], [8, 9])
 mip_problem.cost_limit = 6/v_scale
-mip_problem.cost_limit = 8/v_scale
+# mip_problem.cost_limit = 8/v_scale
 
 
 
-solution_number = 10
+solution_number = 25
 
 solve!(mip_problem;
     # self_cleaning = true,
     include_intermediate_transfer_cost = true,
     solutions_relative_allowance = 0.2,
     solutions_count_maximum = 3*solution_number,
-    time_limit_seconds = 300
+    time_limit_seconds = 20*60
 )
 
 
@@ -547,11 +552,24 @@ scp_problem = SequentialConvexProblem(
     dynamical_error = 1e-4
 );
 
+scp_problem.trust_region_factor = 0.02
+
 @time solve!(scp_problem)
 
 
 
-mip_problem = MixedIntegerProblem(id_subset, [9, 9], [9, 9];
+plot_trajectory_and_thrust_profile_paper(
+    scp_problem;
+    # label_text = "Ship 1:\n10 deployments\n10 collections\n781.41 kg returned",
+    output_file = "output/plots/mixed_trajectory.png"
+)
+
+
+
+
+
+
+mip_problem = MixedIntegerProblem(id_subset, [9, 8], [8, 9];
     times_journey = scp_problem.times_journey
 )
 
@@ -627,7 +645,7 @@ solve!(scp_problem2; fixed_rendezvous = false, fixed_segments = false)
 
 
 
-
+scp_problem1.times_journey
 
 
 

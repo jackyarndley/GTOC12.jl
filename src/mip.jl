@@ -42,9 +42,9 @@ function MixedIntegerProblem(
             11, 
             2, 
             id_subset;
-            algorithm = 1,
-            # time_parameter_days = 135
-            time_parameter_days = 160
+            algorithm = 3,
+            time_parameter_days = 145
+            # time_parameter_days = 160
             # time_parameter_days = 175
         )
 
