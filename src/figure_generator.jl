@@ -665,3 +665,6 @@ plot_trajectory_final(scp_problem1, scp_problem2; output_file = "output/plots/co
 
 
 
+
+
+plot_trajectory_showcase(scp_problem2)
