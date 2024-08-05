@@ -329,6 +329,7 @@ function solve!(
     p::SequentialConvexProblem;
     fixed_segments = false,
     fixed_rendezvous = false,
+    maximum_mass = false
 )
     if fixed_segments && !fixed_rendezvous
         error("Must have non-fixed segments for adaptive rendezvous")
@@ -413,12 +414,14 @@ function solve!(
         end
 
         # Limit maximum mass at start
-        if typeof(p.objective_config) == LoggedMassConfig
-            # @constraint(model, x[n][1][7, 1] <= log(1000/m_scale))
-            @constraint(models[id_groups[n]], x[n][1][7, 1] <= log(3000/m_scale))
-        else
-            # @constraint(model, x[n][1][7, 1] <= 1000/m_scale)
-            @constraint(models[id_groups[n]], x[n][1][7, 1] <= 3000.0/m_scale)
+        if !maximum_mass 
+            if typeof(p.objective_config) == LoggedMassConfig
+                # @constraint(model, x[n][1][7, 1] <= log(1000/m_scale))
+                @constraint(models[id_groups[n]], x[n][1][7, 1] <= log(3000/m_scale))
+            else
+                # @constraint(model, x[n][1][7, 1] <= 1000/m_scale)
+                @constraint(models[id_groups[n]], x[n][1][7, 1] <= 3000.0/m_scale)
+            end
         end
     end
 
@@ -611,10 +614,12 @@ function solve!(
                 delete(models[id_groups[n]], con)
             end
 
-            mass_end_con[n] = if typeof(p.objective_config) == LoggedMassConfig
-                [@constraint(models[id_groups[n]], x[n][end][7, end] + m_violation[n] >= log(500/m_scale + p.mass_overhead - p.Δm0[n][end]))]
-            else
-                [@constraint(models[id_groups[n]], x[n][end][7, end] + m_violation[n] >= 500/m_scale + p.mass_overhead - p.Δm0[n][end])]
+            if !maximum_mass
+                mass_end_con[n] = if typeof(p.objective_config) == LoggedMassConfig
+                    [@constraint(models[id_groups[n]], x[n][end][7, end] + m_violation[n] >= log(500/m_scale + p.mass_overhead - p.Δm0[n][end]))]
+                else
+                    [@constraint(models[id_groups[n]], x[n][end][7, end] + m_violation[n] >= 500/m_scale + p.mass_overhead - p.Δm0[n][end])]
+                end
             end
 
             for con in actual_time_con[n]
@@ -642,8 +647,11 @@ function solve!(
             pickup = p.Δm0[n] .> 0.0
 
             if fixed_rendezvous
-                # objective += x[n][end][7, end]
-                objective[id_groups[n]] -= x[n][1][7, 1]
+                if maximum_mass 
+                    objective[id_groups[n]] += x[n][end][7, end]
+                else
+                    objective[id_groups[n]] -= x[n][1][7, 1]
+                end
             else
                 objective[id_groups[n]] += sum(actual_time[n][pickup]) - sum(actual_time[n][dropoff])
             end
