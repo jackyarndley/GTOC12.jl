@@ -5,6 +5,7 @@ CairoMakie.activate!()
 
 using PairPlots
 using DataFrames
+using CSV
 
 function plot_asteroid_distribution_2d(asteroids_cartesian; title = "")
     f = Figure(size = (800, 800), backgroundcolor = :white, figure_padding = 5)
@@ -266,6 +267,7 @@ plot_transfer_time_statistics(times_journey; title = "transfer time statistics i
 
 
 
+times_intermediate_transfer = [i[3:end-1] - i[2:end-2] for i in times_journey]/day_scale
 times_intermediate_transfer_all = vcat(times_intermediate_transfer...)
 
 
@@ -297,6 +299,9 @@ ax = Axis(
     ylabel = "t [AU]"
     # aspect = 1,
 )
+
+cartesian_start_states = []
+cartesian_end_states = []
 
 rtn_start_states = []
 rtn_end_states = []
@@ -332,8 +337,12 @@ for (id_journey, times_journey) in zip(id_journey, times_journey)
 
         lambert_cost = get_transfer_dv(id_start, time_start, [id_end], time_end - time_start)[1]
 
+        push!(cartesian_start_states, cartesian_start)
+        push!(cartesian_end_states, cartesian_end)
+
         push!(rtn_start_states, vcat(rtn_start, rtn_proj * cartesian_start[4:6]))
         push!(rtn_end_states, vcat(rtn_end, rtn_proj * cartesian_end[4:6]))
+
         push!(transfer_times, time_end - time_start)
         push!(transfer_lambert_costs, lambert_cost)
 
@@ -530,6 +539,41 @@ display(fig)
 
 
 
+
+df = DataFrame(
+    "x0 [AU]" => [k[1] for k in cartesian_start_states],
+    "y0 [AU]" => [k[2] for k in cartesian_start_states],
+    "z0 [AU]" => [k[3] for k in cartesian_start_states],
+    "vx0 [km/s]" => [k[4] for k in cartesian_start_states],
+    "vy0 [km/s]" => [k[5] for k in cartesian_start_states],
+    "vz0 [km/s]" => [k[6] for k in cartesian_start_states],
+    "x1 [AU]" => [k[1] for k in cartesian_end_states],
+    "y1 [AU]" => [k[2] for k in cartesian_end_states],
+    "z1 [AU]" => [k[3] for k in cartesian_end_states],
+    "vx1 [km/s]" => [k[4] for k in cartesian_end_states],
+    "vy1 [km/s]" => [k[5] for k in cartesian_end_states],
+    "vz1 [km/s]" => [k[6] for k in cartesian_end_states],
+    "r0 [AU]" => [k[1] for k in rtn_start_states],
+    "t0 [AU]" => [k[2] for k in rtn_start_states],
+    "n0 [AU]" => [k[3] for k in rtn_start_states],
+    "vr0 [km/s]" => [k[4] for k in rtn_start_states],
+    "vt0 [km/s]" => [k[5] for k in rtn_start_states],
+    "vn0 [km/s]" => [k[6] for k in rtn_start_states],
+    "r1 [AU]" => [k[1] for k in rtn_end_states],
+    "t1 [AU]" => [k[2] for k in rtn_end_states],
+    "n1 [AU]" => [k[3] for k in rtn_end_states],
+    "vr1 [km/s]" => [k[4] for k in rtn_end_states],
+    "vt1 [km/s]" => [k[5] for k in rtn_end_states],
+    "vn1 [km/s]" => [k[6] for k in rtn_end_states],
+    "tof [days]" => transfer_times./day_scale,
+    "Δv_lambert [km/s]" => transfer_lambert_costs.*v_scale,
+    "Δv_lowthrust_maximum [km/s]" => rocket_equation_dv.*v_scale,
+    "m0_maximum [kg]" => maximum_initial_masses,
+    "m1_maximum [kg]" => maximum_final_masses,
+)
+
+
+CSV.write("output/transfer_statistics.csv", df)
 
 
 
