@@ -72,9 +72,9 @@ p = SequentialConvexProblem(
 
 plot_trajectory(p)
 
-solve!(p,
-    MixedTimeAdaptive(); 
-    adaptive_time = false
+solve!(p; 
+    fixed_segments = true,
+    fixed_rendezvous = true
 )
 
 

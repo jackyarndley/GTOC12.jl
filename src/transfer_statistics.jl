@@ -435,9 +435,26 @@ plot_tof_dv_comparison(
 
 
 
+
+df = DataFrame(
+    "ID" => Int64[],
+    "t_n [days]" => Float64[],
+    "x_n [AU]" => Float64[],
+    "y_n [AU]" => Float64[],
+    "z_n [AU]" => Float64[],
+    "vx_n [km/s]" => Float64[],
+    "vy_n [km/s]" => Float64[],
+    "vz_n [km/s]" => Float64[],
+    "ux_n [N]" => Float64[],
+    "uy_n [N]" => Float64[],
+    "uz_n [N]" => Float64[],
+    "m_n [kg]" => Float64[],
+)
+
 maximum_initial_masses = Float64[]
 maximum_final_masses = Float64[]
 
+id = 1
 
 for (id_journey, times_journey) in zip(id_journey, times_journey)
     for (id_start, id_end, time_start, time_end) in zip(
@@ -452,6 +469,8 @@ for (id_journey, times_journey) in zip(id_journey, times_journey)
             continue
         end
 
+        node_time_spacing = (time_end - time_start) / 99
+
         prob = SequentialConvexProblem(
             [[id_start, id_end]],
             [[time_start, time_end]],
@@ -463,17 +482,56 @@ for (id_journey, times_journey) in zip(id_journey, times_journey)
             maximum_mass = true
         )
 
+        convert_logged_mass_to_mass!(prob)
+
         solve!(prob;
             fixed_segments = true,
             fixed_rendezvous = true,
             maximum_mass = true
         )
 
-        push!(maximum_initial_masses, exp(prob.x_nodes[1][1][7, 1])*m_scale)
-        push!(maximum_final_masses, exp(prob.x_nodes[1][1][7, end])*m_scale)
+        solve!(prob;
+            fixed_segments = true,
+            fixed_rendezvous = true,
+            maximum_mass = true
+        )
 
+        for i in 1:length(prob.t_nodes[1][1])
+            control = if i == length(prob.t_nodes[1][1])
+                [0.0, 0.0, 0.0]
+            else
+                prob.u_nodes[1][1][1:3, i]
+            end
+
+            push!(df, (
+                id,
+                prob.t_nodes[1][1][i] / day_scale,
+                prob.x_nodes[1][1][1, i],
+                prob.x_nodes[1][1][2, i],
+                prob.x_nodes[1][1][3, i],
+                prob.x_nodes[1][1][4, i] * v_scale,
+                prob.x_nodes[1][1][5, i] * v_scale,
+                prob.x_nodes[1][1][6, i] * v_scale,
+                control[1] * thrust * m_scale * a_scale * 1e3,
+                control[2] * thrust * m_scale * a_scale * 1e3,
+                control[3] * thrust * m_scale * a_scale * 1e3,
+                prob.x_nodes[1][1][7, i] * m_scale,
+            ))
+
+           
+        end
+
+        push!(maximum_initial_masses, prob.x_nodes[1][1][7, 1]*m_scale)
+        push!(maximum_final_masses, prob.x_nodes[1][1][7, end]*m_scale)
+
+
+        id += 1
     end
 end
+
+
+CSV.write("output/transfer_information.csv", df)
+
 
 
 
