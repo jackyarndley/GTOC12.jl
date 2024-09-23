@@ -90,7 +90,8 @@ function ephermeris_cartesian_from_id(id, times)
     elseif id <= 60000
         ephemeris_cartesian_at(asteroids_classical[:, id], times)
     else
-        ephemeris_cartesian_at(custom_classical[:, id - 60000], 0.0)
+        custom_cartesian[:, id - 60000]
+        # ephemeris_cartesian_at(custom_classical[:, id - 60000], 0.0)
     end
 end
 

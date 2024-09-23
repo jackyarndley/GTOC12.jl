@@ -414,14 +414,18 @@ function solve!(
         end
 
         # Limit maximum mass at start
-        if !maximum_mass 
-            if typeof(p.objective_config) == LoggedMassConfig
-                # @constraint(model, x[n][1][7, 1] <= log(1000/m_scale))
-                @constraint(models[id_groups[n]], x[n][1][7, 1] <= log(3000/m_scale))
-            else
-                # @constraint(model, x[n][1][7, 1] <= 1000/m_scale)
-                @constraint(models[id_groups[n]], x[n][1][7, 1] <= 3000.0/m_scale)
-            end
+        mass_limit = if !maximum_mass 
+            3000.0/m_scale
+        else
+            25000.0/m_scale
+        end
+
+        if typeof(p.objective_config) == LoggedMassConfig
+            # @constraint(model, x[n][1][7, 1] <= log(1000/m_scale))
+            @constraint(models[id_groups[n]], x[n][1][7, 1] <= log(mass_limit))
+        else
+            # @constraint(model, x[n][1][7, 1] <= 1000/m_scale)
+            @constraint(models[id_groups[n]], x[n][1][7, 1] <= mass_limit)
         end
     end
 

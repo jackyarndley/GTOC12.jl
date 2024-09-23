@@ -637,3 +637,199 @@ CSV.write("output/transfer_statistics.csv", df)
 
 
 
+
+
+
+
+df = DataFrame(CSV.File("output/reachability.csv"))
+
+starting_locations = Matrix(df[40000:end, 1:6])'
+ending_locations = Matrix(df[40000:end, 7:12])'
+
+starting_locations[4:6, :] ./= v_scale
+ending_locations[4:6, :] ./= v_scale
+
+maximum_initial_masses = Float64[]
+maximum_final_masses = Float64[]
+
+
+for (starting_location, ending_location) in zip(eachcol(starting_locations), eachcol(ending_locations))
+    custom_cartesian[:, 1] = starting_location
+    custom_cartesian[:, 2] = ending_location
+
+    prob = SequentialConvexProblem(
+        [[60001, 60002]],
+        [[0.0, tof]],
+    )
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    convert_logged_mass_to_mass!(prob)
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    push!(maximum_initial_masses, prob.x_nodes[1][1][7, 1]*m_scale)
+    push!(maximum_final_masses, prob.x_nodes[1][1][7, end]*m_scale)
+
+    break
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# starting_locations = Matrix(df[:, 1:6])'
+# ending_locations = Matrix(df[:, 7:12])'
+
+# starting_locations[4:6, :] ./= v_scale
+# ending_locations[4:6, :] ./= v_scale
+
+node_time_spacing = 10.0*day_scale
+scp_iterations = 20
+
+# Circular Orbit
+starting_location = [
+    3.0,
+    0.0,
+    0.0,
+    0.0,
+    sqrt(1.0/3.0),
+    0.0
+]
+
+tof = 800*day_scale
+
+ending_location = integrate_arc(starting_location, [0.0, 0.0, 0.0, 0.0], [0.0, tof])
+
+
+
+location_delta_x = LinRange(-0.5, 0.5, 50)
+location_delta_y = LinRange(-0.5, 0.5, 50)
+
+
+maximum_initial_transfer_masses = zeros(50, 50)
+maximum_final_transfer_masses = zeros(50, 50)
+
+custom_cartesian = zeros(6, 2)
+
+
+for (i, delta_x) in enumerate(location_delta_x), (j, delta_y) in enumerate(location_delta_y)
+    custom_cartesian[:, 1] = starting_location
+    custom_cartesian[:, 2] = ending_location
+
+    adjusted_ending_location = copy(ending_location)
+    adjusted_ending_location[1] += delta_x
+    adjusted_ending_location[2] += delta_y
+
+    # Calculate the new velocity components for a circular orbit
+    r = sqrt(adjusted_ending_location[1]^2 + adjusted_ending_location[2]^2)
+    v = sqrt(1.0 / r)
+    adjusted_ending_location[4] = -v * (adjusted_ending_location[2] / r)
+    adjusted_ending_location[5] = v * (adjusted_ending_location[1] / r)
+    adjusted_ending_location[6] = 0.0
+
+    custom_cartesian[:, 2] = adjusted_ending_location
+
+    prob = SequentialConvexProblem(
+        [[60001, 60002]],
+        [[0.0, tof]],
+    )
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    convert_logged_mass_to_mass!(prob)
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    maximum_initial_transfer_masses[i, j] = prob.x_nodes[1][1][7, 1]*m_scale
+    maximum_final_transfer_masses[i, j] = prob.x_nodes[1][1][7, end]*m_scale
+end
+
+
+# Plot the contour of the mass use
+f = Figure(size = (800, 800), backgroundcolor = :white, figure_padding = 0)
+
+ax = Axis(
+    f[1, 1]; 
+    xlabel = "Δx [AU]", 
+    ylabel = "Δy [AU]",
+    title = "maximum initial mass for 3.0 AU circular orbit to circular orbit transfers, tof = 800 days"
+)
+
+cont = contourf!(
+    ax,
+    location_delta_x,
+    location_delta_y,
+    maximum_final_transfer_masses,
+    levels = 20,
+    colormap = :viridis
+)
+
+# Add Colorbar
+Colorbar(f[1, 2], cont, labelsize=16, label = "maximum final mass [kg]", tickformat = "{:.0f}")
+
+display(f)
+
+
