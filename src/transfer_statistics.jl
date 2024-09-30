@@ -904,6 +904,8 @@ for row in eachrow(df)
     # break
 end
 
+CSV.write("output/reachability_01_nonrotated_mass.csv", df)
+
 # Plot the contour of the mass use
 f = Figure(size = (800, 800), backgroundcolor = :white, figure_padding = 0)
 
@@ -927,3 +929,4 @@ cont = tricontourf!(
 Colorbar(f[1, 2], cont, labelsize=16, label = "maximum final mass [kg]", tickformat = "{:.0f}")
 
 display(f)
+
