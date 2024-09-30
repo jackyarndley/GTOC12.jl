@@ -154,7 +154,7 @@ function plot_trajectory(
             f[1:2, 1:2]; 
             xlabel = "x [AU]", 
             ylabel = "y [AU]", 
-            limits = (-3.0, 3.0, -3.0, 3.0),
+            limits = (-3.1, 3.1, -3.1, 3.1),
             # limits = (0.5, 1.5, -3.0, -2.0),
             aspect = 1
         )

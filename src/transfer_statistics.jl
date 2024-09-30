@@ -745,14 +745,14 @@ starting_location = [
     0.0
 ]
 
-tof = 800*day_scale
+tof = 500.0*day_scale
 
 ending_location = integrate_arc(starting_location, [0.0, 0.0, 0.0, 0.0], [0.0, tof])
 
 
 
-location_delta_x = LinRange(-0.5, 0.5, 50)
-location_delta_y = LinRange(-0.5, 0.5, 50)
+location_delta_x = LinRange(-1.0, 1.0, 50)
+location_delta_y = LinRange(-1.0, 1.0, 50)
 
 
 maximum_initial_transfer_masses = zeros(50, 50)
@@ -797,14 +797,10 @@ for (i, delta_x) in enumerate(location_delta_x), (j, delta_y) in enumerate(locat
         maximum_mass = true
     )
 
-    solve!(prob;
-        fixed_segments = true,
-        fixed_rendezvous = true,
-        maximum_mass = true
-    )
-
     maximum_initial_transfer_masses[i, j] = prob.x_nodes[1][1][7, 1]*m_scale
     maximum_final_transfer_masses[i, j] = prob.x_nodes[1][1][7, end]*m_scale
+
+    break
 end
 
 
@@ -833,3 +829,101 @@ Colorbar(f[1, 2], cont, labelsize=16, label = "maximum final mass [kg]", tickfor
 display(f)
 
 
+
+
+
+node_time_spacing = 10.0*day_scale
+scp_iterations = 50
+
+
+
+# Plotting provided data
+df = DataFrame(CSV.File("output/reachability_01_nonrotated.csv"))
+
+# Convert row 13 to Float64
+df[!, 13] = Float64.(df[!, 13])
+
+# Add row for maximum initial and final mass to df
+df[!, "maximum_initial_mass"] .= 0.0
+df[!, "maximum_final_mass"] .= 0.0
+
+custom_cartesian = zeros(6, 2)
+
+
+temp = []
+
+for row in eachrow(df)
+    custom_cartesian[:, 1] = Vector(row[1:6])
+    custom_cartesian[:, 2] = Vector(row[7:12])
+
+    custom_cartesian[4:6, 1] ./= v_scale
+    custom_cartesian[4:6, 2] ./= v_scale
+
+    push!(temp, get_transfer_dv(60001, 0.0, [60002], 50.0*day_scale)[1]*v_scale)
+end
+
+argmin(temp)
+
+
+
+get_transfer_dv(60001, 0.0, [60002], 50.0*day_scale)*v_scale
+
+
+plot_trajectory(prob)
+
+
+for row in eachrow(df)
+    custom_cartesian[:, 1] = Vector(row[1:6])
+    custom_cartesian[:, 2] = Vector(row[7:12])
+
+    custom_cartesian[4:6, 1] ./= v_scale
+    custom_cartesian[4:6, 2] ./= v_scale
+
+    prob = SequentialConvexProblem(
+        [[60001, 60002]],
+        [[0.0, row[13]*day_scale]],
+    )
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    convert_logged_mass_to_mass!(prob)
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    row[14] = prob.x_nodes[1][1][7, 1]*m_scale
+    row[15] = prob.x_nodes[1][1][7, end]*m_scale
+
+    # break
+end
+
+# Plot the contour of the mass use
+f = Figure(size = (800, 800), backgroundcolor = :white, figure_padding = 0)
+
+ax = Axis(
+    f[1, 1]; 
+    xlabel = "x1 [AU]", 
+    ylabel = "y1 [AU]",
+    title = "maximum initial mass for 3.0 AU circular orbit to circular orbit transfers, tof = 50 days"
+)
+
+cont = tricontourf!(
+    ax,
+    Vector(df[!, 7]),
+    Vector(df[!, 8]),
+    Vector(df[!, 14]),
+    levels = 20,
+    colormap = :viridis
+)
+
+# Add Colorbar
+Colorbar(f[1, 2], cont, labelsize=16, label = "maximum final mass [kg]", tickformat = "{:.0f}")
+
+display(f)

@@ -40,7 +40,6 @@ Base.show(io::IO, p::SequentialConvexProblem) = begin
     total_deployments = 0
     total_collections = 0
 
-
     for n in 1:p.mixing_number
         deployments = sum(p.Δm0[n] .≈ -40/m_scale)
         collections = sum(p.Δm0[n] .> 0.0)
@@ -241,13 +240,17 @@ function initialize_scp_guess!(
                 tof = p.times_journey[n][k + 1] - p.times_journey[n][k]
 
                 # Prevent near 180 degree transfers
-                while norm(cross(p.x0[n][k][1:3], temp[1:3])) < 0.5
-                    tof += 1*day_scale
+                for _ in 1:10
+                    if norm(cross(p.x0[n][k][1:3], temp[1:3])) > 0.5
+                        break
+                    else
+                        tof += 1*day_scale
 
-                    temp = ephermeris_cartesian_from_id(
-                        p.id_journey[n][k + 1], 
-                        p.times_journey[n][k] + tof
-                    )
+                        temp = ephermeris_cartesian_from_id(
+                            p.id_journey[n][k + 1], 
+                            p.times_journey[n][k] + tof
+                        )
+                    end
                 end
 
                 find_best_lambert_transfer(p.x0[n][k], temp, tof)
@@ -530,6 +533,7 @@ function solve!(
 
                 trust_region_dynamic_con[n][k] = @constraint(models[id_groups[n]],
                     [i=1:(nodes-1)],
+                    # -1e-0 .<= x[n][k][7, i] .- p.x_nodes[n][k][7, i] .<= 1e-0
                     -5e1*current_trust_region_factor - 1e-3 .<= x[n][k][1:6, i] .- p.x_nodes[n][k][1:6, i] .<= 5e1*current_trust_region_factor + 1e-3
                 )
 
@@ -734,6 +738,8 @@ function solve!(
                     u_nodes = p.u_nodes[n][k],
                     p.objective_config,
                 )
+
+                push!(dynamical_errors, abs(p.xf[n][k][7] - p.x_nodes[n][k][7, end]))
 
                 p.xf[n][k][7] = p.x_nodes[n][k][7, end]
 
