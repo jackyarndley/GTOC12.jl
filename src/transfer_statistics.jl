@@ -1,7 +1,7 @@
 include("header.jl")
 
 GLMakie.activate!()
-CairoMakie.activate!()
+# CairoMakie.activate!()
 
 using PairPlots
 using DataFrames
@@ -930,3 +930,79 @@ Colorbar(f[1, 2], cont, labelsize=16, label = "maximum final mass [kg]", tickfor
 
 display(f)
 
+
+
+
+
+
+using NPZ
+
+data = npzread("output/transfer_conditions.npy")
+
+data[:, 1:3] ./= r_scale
+data[:, 4:6] ./= v_scale
+data[:, 7:9] ./= r_scale
+data[:, 10:12] ./= v_scale
+data[:, 13] .*= day_scale
+
+maximum_initial_masses = Float64[]
+maximum_final_masses = Float64[]
+
+node_time_spacing = 10.0*day_scale
+scp_iterations = 50
+
+custom_cartesian = zeros(6, 2)
+
+for row in eachrow(data)
+    custom_cartesian[:, 1] = row[1:6]
+    custom_cartesian[:, 2] = row[7:12]
+
+    prob = SequentialConvexProblem(
+        [[60001, 60002]],
+        [[0.0, row[13]]],
+    )
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    convert_logged_mass_to_mass!(prob)
+
+    solve!(prob;
+        fixed_segments = true,
+        fixed_rendezvous = true,
+        maximum_mass = true
+    )
+
+    push!(maximum_initial_masses, prob.x_nodes[1][1][7, 1]*m_scale)
+    push!(maximum_final_masses, prob.x_nodes[1][1][7, end]*m_scale)
+
+    # break
+end
+
+
+
+# Append the two new columns to the matrix and save as .npy
+data = hcat(data, maximum_initial_masses, maximum_final_masses)
+
+npzwrite("output/transfer_conditions_mass.npy", data)
+
+
+
+# Plot the histogram of the initial mass
+f = Figure(size = (800, 400), backgroundcolor = :white, figure_padding = 5)
+
+ax = Axis(
+    f[1, 1]; 
+    xlabel = "maximum initial mass [kg]",
+)
+
+hist!(
+    ax,
+    maximum_initial_masses, 
+    bins = 100
+)
+
+display(f)
