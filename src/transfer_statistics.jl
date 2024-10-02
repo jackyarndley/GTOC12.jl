@@ -838,7 +838,7 @@ scp_iterations = 50
 
 
 # Plotting provided data
-df = DataFrame(CSV.File("output/reachability_01_nonrotated.csv"))
+df = DataFrame(CSV.File("output/reachability_01.csv"))
 
 # Convert row 13 to Float64
 df[!, 13] = Float64.(df[!, 13])
@@ -913,14 +913,14 @@ ax = Axis(
     f[1, 1]; 
     xlabel = "x1 [AU]", 
     ylabel = "y1 [AU]",
-    title = "maximum initial mass for 3.0 AU circular orbit to circular orbit transfers, tof = 50 days"
+    title = "maximum initial mass for 3.0 AU circular orbit to circular orbit transfers, tof = 150 days"
 )
 
 cont = tricontourf!(
     ax,
     Vector(df[!, 7]),
     Vector(df[!, 8]),
-    Vector(df[!, 14]),
+    min.(Vector(df[!, 14]), 2800.0),
     levels = 20,
     colormap = :viridis
 )
