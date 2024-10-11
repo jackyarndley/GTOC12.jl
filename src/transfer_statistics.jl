@@ -937,7 +937,7 @@ display(f)
 
 using NPZ
 
-data = npzread("output/transfer_conditions_1k.npy")
+data = npzread("output/transfer_conditions_tof.npy")
 
 data[:, 1:3] ./= r_scale
 data[:, 4:6] ./= v_scale
