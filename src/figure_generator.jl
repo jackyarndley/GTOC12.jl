@@ -4,7 +4,11 @@ GLMakie.activate!()
 CairoMakie.activate!()
 
 using LaTeXStrings
+using Latexify
+using DataFrames
+using Format
 
+Latexify.set_default(; env=:tabular)
 
 scp_iterations = 80
 
@@ -49,6 +53,23 @@ plot_thrust_information(p)
 id_subset = [3241, 15184, 19702, 46418, 53592]
 
 
+# Create DataFrame from asteroids_classical[:, id_subset]
+df = DataFrame(
+    asteroids_classical[:, id_subset],
+    string.(id_subset)
+)
+
+df[3, :] = rad2deg.(Vector(df[3, :]))
+df[4, :] = rad2deg.(Vector(df[4, :]))
+df[5, :] = rad2deg.(Vector(df[5, :]))
+df[6, :] = rad2deg.(Vector(df[6, :]))
+
+
+
+print(latexify(df; fmt = FancyNumberFormatter(1), side = [L"a [AU]", L"e [nd]", L"i [deg]", L"\Omega [deg]", L"ω [deg]", L"M [deg]"]))
+print(latexify(df; fmt = x->format(round(x, sigdigits=5)), side = [L"a [AU]", L"e [nd]", L"i [deg]", L"\Omega [deg]", L"ω [deg]", L"M [deg]"]))
+print(latexify(df; fmt = "%.3f", side = [L"a [AU]", L"e [nd]", L"i [deg]", L"\Omega [deg]", L"ω [deg]", L"M [deg]"]))
+
 
 
 
@@ -72,7 +93,7 @@ p1 = SequentialConvexProblem(
     id_journey, 
     times_journey;
     objective_config = LoggedMassConfig(),
-    trust_region_factor = 0.05,
+    trust_region_factor = 0.02,
     mass_overhead = 1.0/m_scale
 );
 
@@ -98,13 +119,20 @@ p3 = SequentialConvexProblem(
     id_journey, 
     times_journey;
     objective_config = LoggedMassConfig(),
-    trust_region_factor = 0.05,
+    trust_region_factor = 0.2,
     mass_overhead = 1.0/m_scale
 );
 
 solve!(p3; 
     fixed_segments = false,
     fixed_rendezvous = false
+)
+
+
+plot_trajectory_and_thrust_profile_paper(
+    p3;
+    label_text = "Ship 1:\n10 deployments\n10 collections\n781.41 kg returned",
+    output_file = "output/plots/scp_example_individual.png"
 )
 
 

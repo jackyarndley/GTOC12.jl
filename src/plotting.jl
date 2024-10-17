@@ -1534,7 +1534,7 @@ function plot_discretization_comparison(
     p3::SequentialConvexProblem;
     output_file = nothing
 )
-    f = Figure(size = (800, 400), backgroundcolor = :white)
+    f = Figure(size = (800, 360), backgroundcolor = :white)
     axs = []
 
     cs = ColorSchemes.tableau_10
@@ -1573,14 +1573,14 @@ function plot_discretization_comparison(
         
         ax = Axis(
             f[i, 1]; 
-            xlabel = i == 3 ? "time " : "", 
-            xticksvisible = false,
-            xticklabelsvisible = false,
+            xlabel = i == 3 ? "time [MJD]" : "", 
+            xticksvisible = i == 3,
+            xticklabelsvisible =  i == 3,
             ylabel = "thrust", 
-            # xticks = [65000, 66000, 67000, 68000, 69000],
+            xticks = [64300, 64400, 64500, 64600, 64700, 64800, 64900, 65000, 65100, 65200, 65300, 65400, 65500],
             yticks = ([0.0, 0.6], ["0.0", "max"]),
             xgridvisible = false,
-            limits = (mjd_start, 65420, -0.05, 0.65)
+            limits = (64300, 65420, -0.05, 0.65)
         )
 
         push!(axs, ax)
@@ -2431,13 +2431,14 @@ function plot_trajectory_and_thrust_profile_paper(
     label_text = ""
 )
 
-    f = Figure(size = (800, 550), backgroundcolor = :white, figure_padding = 2)
+    f = Figure(size = (550, 700), backgroundcolor = :white, figure_padding = 2)
 
     if isnothing(solution_indices)
         solution_indices = collect(1:p.mixing_number)
     end
     
-    cs = ColorSchemes.tab20
+    cs = ColorSchemes.tab10
+    # cs = ColorSchemes.tab20
     # cs = ColorSchemes.tableau_miller_stone
 
     for i in 1:p.mixing_number
@@ -2466,7 +2467,7 @@ function plot_trajectory_and_thrust_profile_paper(
             xticks = [65000, 66000, 67000, 68000, 69000],
             yticks = ([0.0, 0.6], ["0.0", "max"]),
             xgridvisible = false,
-            limits = (mjd_start, mjd_end, -0.05, 0.65)
+            limits = (64300, 69900, -0.05, 0.65)
         )
 
         # scatter!(ax1,
