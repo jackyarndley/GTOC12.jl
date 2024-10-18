@@ -1015,7 +1015,7 @@ function plot_graph_structure(
     plot_labels = true,
     output_file = nothing,
     selection_index = 1,
-    figure_size = (900, 200)
+    figure_size = (700, 200)
 )
 
     stage_size = length(p.id_subset)
@@ -1200,12 +1200,13 @@ function plot_graph_structure(
 
     graphplot!(ax, empty_graph, 
         layout=fixed_layout,
-        ilabels = repeat(1:length(mip_problem.id_subset), p.deployment_nums[selection_index] + p.collection_nums[selection_index]),
+        ilabels = repeat(mip_problem.id_subset, p.deployment_nums[selection_index] + p.collection_nums[selection_index]),
         ilabels_fontsize = 12,
-        node_size = 20,
+        node_size = (40, 20),
         # ilabels_fontsize = 8,
         # node_size = 15,
-        node_marker=Circle;
+        node_marker=Rect;
+        # node_marker=Circle;
     )
 
     if plot_labels
@@ -1246,7 +1247,7 @@ function plot_graph_structure(
 
     temp = stage_Δx*(p.deployment_nums[selection_index] + p.collection_arcs[selection_index] + 1)
 
-    xlims!(ax, [-0.025*temp, 1.025*temp])
+    xlims!(ax, [-0.04*temp, 1.04*temp])
     ylims!(ax, [-node_Δy*(length(p.id_subset) - 0.5), node_Δy*1.1])
     # ylims!(ax, [-node_Δy*(length(p.id_subset) - 0.5), node_Δy*0.5])
     
@@ -1460,12 +1461,12 @@ function plot_graph_structure_big(
 
     graphplot!(ax, empty_graph, 
         layout=fixed_layout,
-        ilabels = repeat(1:length(mip_problem.id_subset), p.deployment_nums[selection_index] + p.collection_nums[selection_index]),
+        ilabels = repeat(mip_problem.id_subset, p.deployment_nums[selection_index] + p.collection_nums[selection_index]),
         # ilabels_fontsize = 12,
         # node_size = 20,
-        ilabels_fontsize = 8,
-        node_size = 15,
-        node_marker=Circle;
+        ilabels_fontsize = 7,
+        node_size = (20, 10),
+        node_marker=Rect;
     )
 
     # if plot_labels

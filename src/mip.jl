@@ -26,6 +26,7 @@ function MixedIntegerProblem(
     collection_nums;
     times_journey = nothing,
     cost_limit = 6.0/v_scale,
+    time_parameter_days = 145,
 )
     if length(id_subset) > 250
         error("Subset size is too big")
@@ -43,9 +44,7 @@ function MixedIntegerProblem(
             2, 
             id_subset;
             algorithm = 3,
-            # time_parameter_days = 145
-            # time_parameter_days = 160
-            time_parameter_days = 175
+            time_parameter_days
         )
 
         times_journey = [
@@ -56,8 +55,11 @@ function MixedIntegerProblem(
                 times_journey[n][end],
             ) for n in 1:mixing_number
         ]
-    end
 
+        if any([any((times_journey[n][2:end] .- times_journey[n][1:end-1]) .<= 0.0) for n in 1:mixing_number])
+            error("Time schedule would mean center transfers are overlapping")
+        end
+    end
 
     times_deployment = [times_journey[n][2:(deployment_nums[n] + 1)] for n in 1:mixing_number]
     times_collection = [times_journey[n][end-collection_nums[n]:end-1] for n in 1:mixing_number]

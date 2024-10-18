@@ -88,6 +88,14 @@ times_journey = mip_problem.times_journey
 id_journey = mip_problem.id_journey_solutions[1]
 
 
+df = DataFrame(
+    convert_time_to_mjd.(times_journey[1])',
+    ["Earth Departure", "Deployment 1", "Deployment 2", "Deployment 3", "Collection 1", "Collection 2", "Collection 3", "Earth Arrival"]
+)
+
+print(latexify(df; fmt = "%.2f", side = [L"Time [MJD]"]))
+
+
 
 p1 = SequentialConvexProblem(
     id_journey, 
@@ -148,7 +156,7 @@ plot_discretization_comparison(p1, p2, p3; output_file = "output/plots/discretiz
 id_subset = [3241, 15184, 19702, 46418, 53592]
 
 
-mip_problem = MixedIntegerProblem(id_subset, [3], [3])
+mip_problem = MixedIntegerProblem(id_subset, [3], [3]; time_parameter_days = 175)
 
 
 mip_problem.cost_limit = 6/v_scale
@@ -189,7 +197,7 @@ plot_graph_structure(
 id_subset = [3241, 15184, 19702, 46418, 53592]
 
 
-mip_problem = MixedIntegerProblem(id_subset, [3, 2], [2, 3])
+mip_problem = MixedIntegerProblem(id_subset, [3, 2], [2, 3]; time_parameter_days = 175)
 mip_problem.cost_limit = 6/v_scale
 
 
@@ -230,7 +238,7 @@ plot_graph_structure(
 id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
 
 
-mip_problem = MixedIntegerProblem(id_subset, [10], [10])
+mip_problem = MixedIntegerProblem(id_subset, [10], [10]; time_parameter_days = 145)
 mip_problem.cost_limit = 10/v_scale
 # mip_problem.cost_limit = 8/v_scale
 
@@ -320,7 +328,7 @@ plot_trajectory(scp_problem; solution_indices = [1], plot_3d = false, rotating =
 solution_number = 50
 
 
-mip_problem = MixedIntegerProblem(id_subset, [10], [10])
+mip_problem = MixedIntegerProblem(id_subset, [10], [10]; time_parameter_days = 145)
 mip_problem.cost_limit = 6/v_scale
 
 
