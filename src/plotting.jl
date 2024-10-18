@@ -1033,7 +1033,8 @@ function plot_graph_structure(
     used_edge_styles = [[] for _ in 1:p.solutions]
     used_edge_widths = [[] for _ in 1:p.solutions]
 
-    layout = []
+    node_layout = []
+    arc_layout = []
 
     # color_range = ColorSchemes.tab10
     # color_range = ColorSchemes.tableau_10
@@ -1042,9 +1043,13 @@ function plot_graph_structure(
     # color_range = ColorSchemes.tableau_jewel_bright
     # color_range = ColorSchemes.tableau_miller_stone
 
+    arc_node_offset = 0.01
+
     for stage in 1:p.deployment_nums[selection_index]
         for i in 1:stage_size
-            push!(layout, ((stage - 1)*stage_Δx, -(i-1)*node_Δy))
+            push!(node_layout, ((stage - 1)*stage_Δx, -(i-1)*node_Δy))
+            push!(arc_layout, ((stage - 1)*stage_Δx - arc_node_offset, -(i-1)*node_Δy))
+            push!(arc_layout, ((stage - 1)*stage_Δx + arc_node_offset, -(i-1)*node_Δy))
         end
     end
 
@@ -1065,7 +1070,7 @@ function plot_graph_structure(
                                 used_edge_widths[l][end] += used_edge_expansion
                             end
 
-                            push!(used_edge_lists[k], (i + stage_size*(stage-1), j + stage_size*stage))
+                            push!(used_edge_lists[k], (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
                             push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
                             push!(used_edge_styles[k], :solid)
                             push!(used_edge_widths[k], 4)
@@ -1075,13 +1080,13 @@ function plot_graph_structure(
                 end
 
                 if !used_check
-                    push!(unused_edge_list, (i + stage_size*(stage-1), j + stage_size*stage))
+                    push!(unused_edge_list, (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
                 end
             end
         end
     end
 
-    collection_offset = length(layout)
+    collection_offset = length(node_layout)
 
     for i in 1:stage_size, j in 1:stage_size
         if !plot_pruned || (p.intermediate_cost[selection_index][i, j] <= p.cost_limit)
@@ -1099,7 +1104,7 @@ function plot_graph_structure(
                             used_edge_widths[l][end] += used_edge_expansion
                         end
                     
-                        push!(used_edge_lists[k], (collection_offset - stage_size + i, collection_offset + j))
+                        push!(used_edge_lists[k], (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
                         push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
                         push!(used_edge_styles[k], :solid)
                         push!(used_edge_widths[k], 4)
@@ -1109,14 +1114,16 @@ function plot_graph_structure(
             end
 
             if !used_check
-                push!(unused_edge_list, (collection_offset - stage_size + i, collection_offset + j))
+                push!(unused_edge_list, (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
             end
         end
     end
 
     for stage in (p.deployment_nums[selection_index] + 1):(p.deployment_nums[selection_index] + p.collection_nums[selection_index])
         for i in 1:stage_size
-            push!(layout, ((stage - 1 + 1)*stage_Δx, -(i-1)*node_Δy))
+            push!(node_layout, ((stage - 1 + 1)*stage_Δx, -(i-1)*node_Δy))
+            push!(arc_layout, ((stage - 1 + 1)*stage_Δx - arc_node_offset, -(i-1)*node_Δy))
+            push!(arc_layout, ((stage - 1 + 1)*stage_Δx + arc_node_offset, -(i-1)*node_Δy))
         end
     end
 
@@ -1137,7 +1144,7 @@ function plot_graph_structure(
                                 used_edge_widths[l][end] += used_edge_expansion
                             end
                         
-                            push!(used_edge_lists[k], (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
+                            push!(used_edge_lists[k], (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
                             push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
                             push!(used_edge_styles[k], :solid)
                             push!(used_edge_widths[k], 4)
@@ -1147,17 +1154,18 @@ function plot_graph_structure(
                 end
 
                 if !used_check
-                    push!(unused_edge_list, (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
+                    push!(unused_edge_list, (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
                 end
             end
         end
     end
-    
-    unused_graph = SimpleDiGraph(length(layout))
 
-    [add_edge!(unused_graph, e) for e in unused_edge_list]
+    unused_arc_graph = SimpleDiGraph(length(arc_layout))
 
-    fixed_layout(_) = layout
+    [add_edge!(unused_arc_graph, e) for e in unused_edge_list]
+
+    fixed_node_layout(_) = node_layout
+    fixed_arc_layout(_) = arc_layout
 
     f = Figure(size = figure_size, backgroundcolor = :white, figure_padding = 0)
 
@@ -1167,9 +1175,8 @@ function plot_graph_structure(
         # size = (800, 800),
     )
 
-
-    graphplot!(ax, unused_graph, 
-        layout=fixed_layout,
+    graphplot!(ax, unused_arc_graph, 
+        layout=fixed_arc_layout,
         # size = (800, 800),
         edge_plottype=:beziersegments,
         edge_color= (:black, 0.1),
@@ -1180,12 +1187,12 @@ function plot_graph_structure(
 
     for k in p.solutions:-1:1
     # for k in 1:p.solutions
-        used_graph = SimpleDiGraph(length(layout))
+        used_graph = SimpleDiGraph(length(arc_layout))
 
         [add_edge!(used_graph, e) for e in used_edge_lists[k]]
 
         graphplot!(ax, used_graph, 
-            layout=fixed_layout,
+            layout=fixed_arc_layout,
             edge_plottype=:beziersegments,
             edge_color=used_edge_colors[k],
             edge_attr = (; linestyle = used_edge_styles[k]),
@@ -1195,11 +1202,10 @@ function plot_graph_structure(
         )
     end
 
-
-    empty_graph = SimpleDiGraph(length(layout))
+    empty_graph = SimpleDiGraph(length(node_layout))
 
     graphplot!(ax, empty_graph, 
-        layout=fixed_layout,
+        layout=fixed_node_layout,
         ilabels = repeat(mip_problem.id_subset, p.deployment_nums[selection_index] + p.collection_nums[selection_index]),
         ilabels_fontsize = 12,
         node_size = (40, 20),
@@ -1294,7 +1300,8 @@ function plot_graph_structure_big(
     used_edge_styles = [[] for _ in 1:p.solutions]
     used_edge_widths = [[] for _ in 1:p.solutions]
 
-    layout = []
+    node_layout = []
+    arc_layout = []
 
     # color_range = ColorSchemes.tab10
     # color_range = ColorSchemes.tableau_10
@@ -1302,10 +1309,13 @@ function plot_graph_structure_big(
     color_range = get(colorschemes[:inferno], LinRange(1.0, 0.0, 50))
     # color_range = ColorSchemes.tableau_jewel_bright
     # color_range = ColorSchemes.tableau_miller_stone
+    arc_node_offset = 0.02
 
     for stage in 1:p.deployment_nums[selection_index]
         for i in 1:stage_size
-            push!(layout, ((stage - 1)*stage_Δx, -(i-1)*node_Δy))
+            push!(node_layout, ((stage - 1)*stage_Δx, -(i-1)*node_Δy))
+            push!(arc_layout, ((stage - 1)*stage_Δx - arc_node_offset, -(i-1)*node_Δy))
+            push!(arc_layout, ((stage - 1)*stage_Δx + arc_node_offset, -(i-1)*node_Δy))
         end
     end
 
@@ -1326,7 +1336,7 @@ function plot_graph_structure_big(
                                 used_edge_widths[l][end] += used_edge_expansion
                             end
 
-                            push!(used_edge_lists[k], (i + stage_size*(stage-1), j + stage_size*stage))
+                            push!(used_edge_lists[k], (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
                             push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
                             push!(used_edge_styles[k], :solid)
                             push!(used_edge_widths[k], 4)
@@ -1336,13 +1346,13 @@ function plot_graph_structure_big(
                 end
 
                 if !used_check
-                    push!(unused_edge_list, (i + stage_size*(stage-1), j + stage_size*stage))
+                    push!(unused_edge_list, (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
                 end
             end
         end
     end
 
-    collection_offset = length(layout)
+    collection_offset = length(node_layout)
 
     for i in 1:stage_size, j in 1:stage_size
         if !plot_pruned || (p.intermediate_cost[selection_index][i, j] <= p.cost_limit)
@@ -1360,7 +1370,7 @@ function plot_graph_structure_big(
                             used_edge_widths[l][end] += used_edge_expansion
                         end
                     
-                        push!(used_edge_lists[k], (collection_offset - stage_size + i, collection_offset + j))
+                        push!(used_edge_lists[k], (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
                         push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
                         push!(used_edge_styles[k], :solid)
                         push!(used_edge_widths[k], 4)
@@ -1370,14 +1380,16 @@ function plot_graph_structure_big(
             end
 
             if !used_check
-                push!(unused_edge_list, (collection_offset - stage_size + i, collection_offset + j))
+                push!(unused_edge_list, (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
             end
         end
     end
 
     for stage in (p.deployment_nums[selection_index] + 1):(p.deployment_nums[selection_index] + p.collection_nums[selection_index])
         for i in 1:stage_size
-            push!(layout, ((stage - 1 + 1)*stage_Δx, -(i-1)*node_Δy))
+            push!(node_layout, ((stage - 1 + 1)*stage_Δx, -(i-1)*node_Δy))
+            push!(arc_layout, ((stage - 1 + 1)*stage_Δx - arc_node_offset, -(i-1)*node_Δy))
+            push!(arc_layout, ((stage - 1 + 1)*stage_Δx + arc_node_offset, -(i-1)*node_Δy))
         end
     end
 
@@ -1398,7 +1410,7 @@ function plot_graph_structure_big(
                                 used_edge_widths[l][end] += used_edge_expansion
                             end
                         
-                            push!(used_edge_lists[k], (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
+                            push!(used_edge_lists[k], (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
                             push!(used_edge_colors[k], (color_range[(k-1) % length(color_range) + 1], 1.0))
                             push!(used_edge_styles[k], :solid)
                             push!(used_edge_widths[k], 4)
@@ -1408,18 +1420,19 @@ function plot_graph_structure_big(
                 end
 
                 if !used_check
-                    push!(unused_edge_list, (collection_offset + i + stage_size*(stage-1), collection_offset + j + stage_size*stage))
+                    push!(unused_edge_list, (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
                 end
             end
         end
     end
+
+    unused_arc_graph = SimpleDiGraph(length(arc_layout))
+
+    [add_edge!(unused_arc_graph, e) for e in unused_edge_list]
+
+    fixed_node_layout(_) = node_layout
+    fixed_arc_layout(_) = arc_layout
     
-    unused_graph = SimpleDiGraph(length(layout))
-
-    [add_edge!(unused_graph, e) for e in unused_edge_list]
-
-    fixed_layout(_) = layout
-
     f = Figure(size = figure_size, backgroundcolor = :white, figure_padding = 0)
 
     ax = Axis(
@@ -1429,8 +1442,8 @@ function plot_graph_structure_big(
     )
 
 
-    graphplot!(ax, unused_graph, 
-        layout=fixed_layout,
+    graphplot!(ax, unused_arc_graph, 
+        layout=fixed_arc_layout,
         # size = (800, 800),
         edge_plottype=:beziersegments,
         edge_color= (:black, 0.08),
@@ -1441,12 +1454,12 @@ function plot_graph_structure_big(
 
     for k in p.solutions:-1:1
     # for k in 1:p.solutions
-        used_graph = SimpleDiGraph(length(layout))
+        used_graph = SimpleDiGraph(length(arc_layout))
 
         [add_edge!(used_graph, e) for e in used_edge_lists[k]]
 
         graphplot!(ax, used_graph, 
-            layout=fixed_layout,
+            layout=fixed_arc_layout,
             edge_plottype=:beziersegments,
             edge_color=used_edge_colors[k],
             edge_attr = (; linestyle = used_edge_styles[k]),
@@ -1457,15 +1470,15 @@ function plot_graph_structure_big(
     end
 
 
-    empty_graph = SimpleDiGraph(length(layout))
+    empty_graph = SimpleDiGraph(length(node_layout))
 
     graphplot!(ax, empty_graph, 
-        layout=fixed_layout,
+        layout=fixed_node_layout,
         ilabels = repeat(mip_problem.id_subset, p.deployment_nums[selection_index] + p.collection_nums[selection_index]),
         # ilabels_fontsize = 12,
         # node_size = 20,
         ilabels_fontsize = 7,
-        node_size = (20, 10),
+        node_size = (22, 10),
         node_marker=Rect;
     )
 
