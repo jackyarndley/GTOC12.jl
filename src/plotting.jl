@@ -2854,3 +2854,60 @@ function plot_trajectory_showcase(
 
     return
 end
+
+
+
+function plot_bip_solution_values(
+    mip_problem1, 
+    mip_problem2;
+    output_file = nothing
+)
+
+    f = Figure(size = (800, 240), backgroundcolor = :white)
+
+    cs = ColorSchemes.tableau_10
+    
+    ax = Axis(
+        f[1, 1]; 
+        xlabel = "BIP solution rank", 
+        ylabel = "total transfer Δv [km/s]", 
+        # xticks = 0:5:50,
+        # limits = (0, 51, 720, 790)
+        # xticks = 0:10:50
+    )
+
+    thresholded_solutions = [val in mip_problem1.id_journey_solutions for val in mip_problem2.id_journey_solutions]
+
+    solution_indices = collect(1:mip_problem2.solutions)
+
+    scatter!(
+        ax,
+        solution_indices[.!thresholded_solutions],
+        mip_problem2.objective_solutions[.!thresholded_solutions].*v_scale,
+        color = cs[2],
+        label = "pruned away",
+        markersize = 8,
+    )
+
+    scatter!(
+        ax,
+        solution_indices[thresholded_solutions],
+        mip_problem2.objective_solutions[thresholded_solutions].*v_scale,
+        color = cs[1],
+        label = "remaining",
+        markersize = 8,
+    )
+
+
+
+    axislegend(ax, unique = true, merge = true, orientation = :vertical, position = :rb)
+
+    resize_to_layout!(f)
+    display(f)
+
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
+    return
+end
