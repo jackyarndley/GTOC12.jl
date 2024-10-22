@@ -162,13 +162,6 @@ mip_problem.cost_limit = 6/v_scale
 
 
 
-solve!(mip_problem;
-    # self_cleaning = true,
-    include_intermediate_transfer_cost = true,
-    solutions_relative_allowance = 0.1,
-    solutions_count_maximum = 3
-)
-
 plot_graph_structure(
     mip_problem;
     plot_pruned = false,
@@ -190,6 +183,7 @@ plot_graph_structure(
     plot_optimal_path = true,
     output_file = "output/plots/bip_solutions.png"
 )
+
 
 
 
@@ -230,6 +224,43 @@ plot_graph_structure(
 
 
 
+id_subset = [3241, 15184, 19702, 46418, 53592]
+
+
+mip_problem1 = MixedIntegerProblem(id_subset, [3], [3]; time_parameter_days = 175)
+
+
+mip_problem1.cost_limit = 6/v_scale
+
+
+solve!(mip_problem1;
+    # self_cleaning = true,
+    include_intermediate_transfer_cost = true,
+    solutions_relative_allowance = 1000.0,
+    solutions_count_maximum = 10000
+)
+
+
+mip_problem2 = MixedIntegerProblem(id_subset, [3], [3]; time_parameter_days = 175)
+
+
+mip_problem2.cost_limit = 60000/v_scale
+
+
+solve!(mip_problem2;
+    # self_cleaning = true,
+    include_intermediate_transfer_cost = true,
+    solutions_relative_allowance = 1000.0,
+    solutions_count_maximum = 10000
+)
+
+
+
+plot_bip_solution_values(
+    mip_problem1, 
+    mip_problem2; 
+    output_file = "output/plots/bip_solution_values.png"
+)
 
 
 # id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])

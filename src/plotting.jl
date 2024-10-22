@@ -2920,3 +2920,126 @@ function plot_solution_ships(
 
     return
 end
+
+
+function plot_solution_ships(
+    average_mined_mass_all,
+    allowed_mined_mass_all;
+    max_ships = 30,
+    max_mass = 800.0,
+    output_file = nothing,
+)
+
+    f = Figure(size = (800, 350), backgroundcolor = :white)
+
+    ax = Axis(f[1, 1],
+        # title = "Solution Ships",
+        xlabel = "number of ships in campaign",
+        ylabel = "average ship mined mass [kg]",
+        limits = ((0.5, max_ships + 0.5), (600.0, max_mass)),
+        xticks = 0:1:max_ships,
+        xticklabelsize = 10,
+        # yticklabelsize = 10,
+        # leftpadding = 20,
+        # bottompadding = 20,
+        # xgridvisible = false
+    )
+
+    cs = ColorSchemes.tab10
+
+    val1 = 0.3
+    val2 = 0.2
+
+    for i in 1:max_ships
+        lines!(ax, [i-val1, i+val1], [average_mined_mass_all[i], average_mined_mass_all[i]], color=:black, linewidth=2, alpha=0.8, label="average mined mass")
+
+        # rangebars!(ax, 
+        #     [i], 
+        #     minimum(mined_mass_all[chosen_ships_all[i]]), 
+        #     maximum(mined_mass_all[chosen_ships_all[i]]), 
+        #     color = :black,
+        #     whiskerwidth = 15, 
+        #     direction = :y
+        # )
+
+        lines!(ax, [i-val1, i+val1], [allowed_mined_mass_all[i], allowed_mined_mass_all[i]], color=cs[4], linewidth=2, alpha=0.8, label="permitted mined mass")
+
+        for j in chosen_ships_all[i]
+            temp = if length(findall(==(groups_all[j]), groups_all)) == 1
+                lines!(ax, [i-val2, i+val2], [mined_mass_all[j], mined_mass_all[j]], color=cs[1], alpha=0.4, linewidth=2, label="self-cleaning ship")
+            else
+                lines!(ax, [i-val2, i+val2], [mined_mass_all[j], mined_mass_all[j]], color=cs[2], alpha=0.4, linewidth=2, label="mixed ship")
+            end
+
+        end
+    end
+
+    axislegend(ax, unique = true, merge = true, orientation = :vertical, position = :lb)
+
+
+    resize_to_layout!(f)
+    display(f)
+
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
+    return
+end
+
+
+
+function plot_bip_solution_values(
+    mip_problem1, 
+    mip_problem2;
+    output_file = nothing
+)
+
+    f = Figure(size = (800, 240), backgroundcolor = :white)
+
+    cs = ColorSchemes.tableau_10
+    
+    ax = Axis(
+        f[1, 1]; 
+        xlabel = "BIP solution rank", 
+        ylabel = "total transfer Δv [km/s]", 
+        # xticks = 0:5:50,
+        # limits = (0, 51, 720, 790)
+        # xticks = 0:10:50
+    )
+
+    thresholded_solutions = [val in mip_problem1.id_journey_solutions for val in mip_problem2.id_journey_solutions]
+
+    solution_indices = collect(1:mip_problem2.solutions)
+
+    scatter!(
+        ax,
+        solution_indices[.!thresholded_solutions],
+        mip_problem2.objective_solutions[.!thresholded_solutions].*v_scale,
+        color = cs[2],
+        label = "pruned away",
+        markersize = 8,
+    )
+
+    scatter!(
+        ax,
+        solution_indices[thresholded_solutions],
+        mip_problem2.objective_solutions[thresholded_solutions].*v_scale,
+        color = cs[1],
+        label = "remaining",
+        markersize = 8,
+    )
+
+
+
+    axislegend(ax, unique = true, merge = true, orientation = :vertical, position = :rb)
+
+    resize_to_layout!(f)
+    display(f)
+
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
+    return
+end

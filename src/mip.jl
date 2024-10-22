@@ -258,6 +258,14 @@ function solve!(
         deployment_ids = [sort(filter(vals -> x[vals[1], vals[2], vals[3]] >= 0.5, collect(eachindex(x))); by=x->x[3]) for x in deployment_value]
         collection_ids = [sort(filter(vals -> x[vals[1], vals[2], vals[3]] >= 0.5, collect(eachindex(x))); by=x->x[3]) for x in collection_value]
 
+        # display(
+        #     [[v_scale*p.deployment_cost[n][i, j, k] for (i, j, k) in deployment_ids[n]] for n in 1:length(deployment_ids)]
+        # )
+
+        # display(
+        #     [[v_scale*p.collection_cost[n][i, j, k] for (i, j, k) in collection_ids[n]] for n in 1:length(collection_ids)]
+        # )
+
         id_journey_solution = [
             vcat(
                 [0], 
