@@ -13,6 +13,7 @@ using GLMakie
 using GraphMakie
 using Graphs
 using ColorSchemes
+using SwarmMakie
 
 CairoMakie.activate!() 
 

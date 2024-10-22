@@ -923,8 +923,8 @@ function plot_team_improvements(
         # ylabel = "thrust", 
         # xticks = [65000, 66000, 67000, 68000, 69000],
         # yticks = ([0.0, 0.6], ["0.0", "max"]),
-        xgridvisible = false,
-        ygridvisible = false,
+        # xgridvisible = false,
+        # ygridvisible = false,
         yaxisposition = :left,
         yticks = (collect(1:length(submitted_files)), team_names),
         # limits = (mjd_start, 65420, -0.05, 0.65)
@@ -982,7 +982,7 @@ function plot_team_improvements(
                 [mass, mass], 
                 [y_position-0.18, y_position+0.18],
                 color=cs[color],
-                label= ["Self-cleaning", "Mixed"][color],
+                label= ["self-cleaning ship", "mixed ship"][color],
                 alpha=0.75,
                 linewidth=2,
                 # label=false
@@ -992,7 +992,7 @@ function plot_team_improvements(
         push!(axs, ax)
     end
 
-    axislegend(ax, merge = true, unique = true, orientation = :horizontal)
+    axislegend(ax, merge = true, unique = true, orientation = :vertical, position = :rc)
 
     linkxaxes!(axs...)
     resize_to_layout!(f)
@@ -2845,6 +2845,72 @@ function plot_trajectory_showcase(
     
 
     # linkxaxes!(axs...)
+    resize_to_layout!(f)
+    display(f)
+
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
+    return
+end
+
+
+function plot_solution_ships(
+    average_mined_mass_all,
+    allowed_mined_mass_all;
+    max_ships = 30,
+    max_mass = 800.0,
+    output_file = nothing,
+)
+
+    f = Figure(size = (800, 350), backgroundcolor = :white)
+
+    ax = Axis(f[1, 1],
+        # title = "Solution Ships",
+        xlabel = "number of ships in campaign",
+        ylabel = "average ship mined mass [kg]",
+        limits = ((0.5, max_ships + 0.5), (600.0, max_mass)),
+        xticks = 0:1:max_ships,
+        xticklabelsize = 10,
+        # yticklabelsize = 10,
+        # leftpadding = 20,
+        # bottompadding = 20,
+        # xgridvisible = false
+    )
+
+    cs = ColorSchemes.tab10
+
+    val1 = 0.3
+    val2 = 0.2
+
+    for i in 1:max_ships
+        lines!(ax, [i-val1, i+val1], [average_mined_mass_all[i], average_mined_mass_all[i]], color=:black, linewidth=2, alpha=0.8, label="average mined mass")
+
+        # rangebars!(ax, 
+        #     [i], 
+        #     minimum(mined_mass_all[chosen_ships_all[i]]), 
+        #     maximum(mined_mass_all[chosen_ships_all[i]]), 
+        #     color = :black,
+        #     whiskerwidth = 15, 
+        #     direction = :y
+        # )
+
+        lines!(ax, [i-val1, i+val1], [allowed_mined_mass_all[i], allowed_mined_mass_all[i]], color=cs[4], linewidth=2, alpha=0.8, label="permitted mined mass")
+
+        for j in chosen_ships_all[i]
+            temp = if length(findall(==(groups_all[j]), groups_all)) == 1
+                lines!(ax, [i-val2, i+val2], [mined_mass_all[j], mined_mass_all[j]], color=cs[1], alpha=0.4, linewidth=2, label="self-cleaning ship")
+            else
+                lines!(ax, [i-val2, i+val2], [mined_mass_all[j], mined_mass_all[j]], color=cs[2], alpha=0.4, linewidth=2, label="mixed ship")
+            end
+
+        end
+    end
+
+    axislegend(ax, unique = true, merge = true, orientation = :vertical, position = :lb)
+
+
     resize_to_layout!(f)
     display(f)
 

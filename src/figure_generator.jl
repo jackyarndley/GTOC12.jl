@@ -15,7 +15,6 @@ scp_iterations = 80
 node_time_spacing = 20.0*day_scale
 
 
-
 id_journey = [
     [0, 15184, 12286, 15184, 12286, -3]
 ]
@@ -704,3 +703,51 @@ plot_trajectory_final(scp_problem1, scp_problem2; output_file = "output/plots/co
 
 
 plot_trajectory_showcase(scp_problem2)
+
+
+
+
+
+
+
+id_journey_all, times_journey_all, mined_mass_all, penalised_mass_all, groups_all, result_files_all = load_result_folders_grouping(
+    [
+        "data/bundled/reoptimized/CUSTOM",
+        "data/bundled/reoptimized/CUSTOM_MIXES/JPL_MIX_1",
+        "data/bundled/reoptimized/CUSTOM_MIXES/JPL_MIX_2",
+        "data/bundled/reoptimized/CUSTOM_MIXES/JPL_MIX_1_REF",
+        "data/bundled/reoptimized/CUSTOM_MIXES/JPL_MIX_2_REF",
+        "data/bundled/reoptimized/CUSTOM_MIXES/JPL_MIX_3_REF",
+        "data/bundled/reoptimized/CUSTOM_MIXES/JPL_MIX_4_REF",
+        "data/bundled/reoptimized/CUSTOM_MIXES/JACK_MIX_1",
+        "data/bundled/reoptimized/CUSTOM_MIXES/JACK_MIX_1_REF",
+        "data/bundled/reoptimized/CUSTOM_EXTRA",
+        "data/bundled/reoptimized/CUSTOM_TODO",
+        "data/bundled/reoptimized/CUSTOM_REMIX",
+        "data/bundled/reoptimized/CUSTOM_REF",
+        "data/bundled/reoptimized/NUAA", 
+        "data/bundled/reoptimized/ADL", 
+        "data/bundled/reoptimized/ATQ", 
+        "data/bundled/reoptimized/SIGMA", 
+        "data/bundled/reoptimized/NUDT",
+        "data/bundled/reoptimized/OptimiCS",
+        "data/bundled/reoptimized/TheAntipodes",
+        "data/bundled/reoptimized/ESA",
+        "data/bundled/reoptimized/JPL",
+        "data/bundled/reoptimized/JPL_POST",
+        "data/bundled/reoptimized/BIT",
+    ]
+);
+
+
+penalised_mass_all = deepcopy(mined_mass_all)
+
+@time chosen_ships_all, average_mined_mass_all, average_penalised_mass_all, allowed_mined_mass_all = choose_best_ships(id_journey_all, penalised_mass_all, mined_mass_all, groups_all; max_ships = 50)
+
+plot_solution_ships(
+    average_mined_mass_all, 
+    allowed_mined_mass_all; 
+    max_ships = 50, 
+    max_mass = 800.0,
+    output_file = "output/plots/ship_selection.png"
+)
