@@ -50,24 +50,29 @@ plot_thrust_information(p)
 
 
 id_subset = [3241, 15184, 19702, 46418, 53592]
+id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
 
 
-# Create DataFrame from asteroids_classical[:, id_subset]
+# Create DataFrame
 df = DataFrame(
-    asteroids_classical[:, id_subset],
-    string.(id_subset)
+    [string.(id_subset),
+    asteroids_classical[1, id_subset],
+    asteroids_classical[2, id_subset],
+    asteroids_classical[3, id_subset],
+    asteroids_classical[4, id_subset],
+    asteroids_classical[5, id_subset],
+    asteroids_classical[6, id_subset]],
+    [:ID, :a, :e, :i, :Ω, :ω, :M]
 )
 
-df[3, :] = rad2deg.(Vector(df[3, :]))
-df[4, :] = rad2deg.(Vector(df[4, :]))
-df[5, :] = rad2deg.(Vector(df[5, :]))
-df[6, :] = rad2deg.(Vector(df[6, :]))
+
+df[:, :i] = rad2deg.(Vector(df[:, :i]))
+df[:, :Ω] = rad2deg.(Vector(df[:, :Ω]))
+df[:, :ω] = rad2deg.(Vector(df[:, :ω]))
+df[:, :M] = rad2deg.(Vector(df[:, :M]))
 
 
-
-print(latexify(df; fmt = FancyNumberFormatter(1), side = [L"a [AU]", L"e [nd]", L"i [deg]", L"\Omega [deg]", L"ω [deg]", L"M [deg]"]))
-print(latexify(df; fmt = x->format(round(x, sigdigits=5)), side = [L"a [AU]", L"e [nd]", L"i [deg]", L"\Omega [deg]", L"ω [deg]", L"M [deg]"]))
-print(latexify(df; fmt = "%.3f", side = [L"a [AU]", L"e [nd]", L"i [deg]", L"\Omega [deg]", L"ω [deg]", L"M [deg]"]))
+print(latexify(df; fmt = "%.3f"))
 
 
 

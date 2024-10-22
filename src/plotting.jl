@@ -3001,8 +3001,8 @@ function plot_bip_solution_values(
     
     ax = Axis(
         f[1, 1]; 
-        xlabel = "BIP solution rank", 
-        ylabel = "total transfer Δv [km/s]", 
+        xlabel = "total transfer Δv [km/s]", 
+        ylabel = "count", 
         # xticks = 0:5:50,
         # limits = (0, 51, 720, 790)
         # xticks = 0:10:50
@@ -3012,27 +3012,58 @@ function plot_bip_solution_values(
 
     solution_indices = collect(1:mip_problem2.solutions)
 
-    scatter!(
-        ax,
-        solution_indices[.!thresholded_solutions],
-        mip_problem2.objective_solutions[.!thresholded_solutions].*v_scale,
-        color = cs[2],
-        label = "pruned away",
-        markersize = 8,
-    )
+    bins = collect(10.0:0.5:40.0)
+    bin_centers = 0.5*(bins[1:end-1] + bins[2:end])
 
-    scatter!(
-        ax,
-        solution_indices[thresholded_solutions],
-        mip_problem2.objective_solutions[thresholded_solutions].*v_scale,
-        color = cs[1],
-        label = "remaining",
-        markersize = 8,
-    )
+    bin_counts_thresholded = [sum((mip_problem2.objective_solutions[thresholded_solutions].*v_scale .>= bins[i]) .& (mip_problem2.objective_solutions[thresholded_solutions].*v_scale .< bins[i+1])) for i in 1:length(bins)-1]
+    
+    bin_counts_not_thresholded = [sum((mip_problem2.objective_solutions[.!thresholded_solutions].*v_scale .>= bins[i]) .& (mip_problem2.objective_solutions[.!thresholded_solutions].*v_scale .< bins[i+1])) for i in 1:length(bins)-1]
+
+    for i in 1:length(bin_centers)
+        display(bin_counts_thresholded[i])
+
+        scatter!(
+            ax,
+            fill(bin_centers[i], bin_counts_thresholded[i]),
+            collect(1:bin_counts_thresholded[i]),
+            color = cs[1],
+            label = "remaining",
+            markersize = 8,
+        )
+
+        scatter!(
+            ax,
+            fill(bin_centers[i], bin_counts_not_thresholded[i]),
+            bin_counts_thresholded[i] .+ collect(1:bin_counts_not_thresholded[i]),
+            color = cs[2],
+            label = "pruned",
+            markersize = 8,
+        )
+    end
 
 
 
-    axislegend(ax, unique = true, merge = true, orientation = :vertical, position = :rb)
+    # scatter!(
+    #     ax,
+    #     solution_indices[.!thresholded_solutions],
+    #     mip_problem2.objective_solutions[.!thresholded_solutions].*v_scale,
+    #     color = cs[2],
+    #     label = "pruned",
+    #     markersize = 8,
+    # )
+
+    # scatter!(
+    #     ax,
+    #     solution_indices[thresholded_solutions],
+    #     mip_problem2.objective_solutions[thresholded_solutions].*v_scale,
+    #     color = cs[1],
+    #     label = "remaining",
+    #     markersize = 8,
+    # )
+
+
+
+    axislegend(ax, unique = true, merge = true, orientation = :vertical, position = :rt)
 
     resize_to_layout!(f)
     display(f)
