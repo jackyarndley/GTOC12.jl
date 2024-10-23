@@ -2684,6 +2684,195 @@ function plot_trajectory_and_thrust_profile_paper(
 end
 
 
+
+function plot_trajectory_paper_2(
+    p::SequentialConvexProblem;
+    output_file = nothing,
+    solution_indices = nothing,
+    label_text = ""
+)
+
+    f = Figure(size = (500, 500), backgroundcolor = :white, figure_padding = 2)
+
+    if isnothing(solution_indices)
+        solution_indices = collect(1:p.mixing_number)
+    end
+    
+
+
+    # cs = ColorSchemes.tab10
+    cs = ColorSchemes.tab20
+    # cs = ColorSchemes.tableau_miller_stone
+
+    for i in 1:p.mixing_number
+
+        ax1 = Axis(
+            f[1:4, i]; 
+            xlabel = "x [AU]", 
+            ylabel = i==1 ? "y [AU]" : "", 
+            limits = (-3.2, 3.2, -3.2, 3.2),
+            # limits = (-0.25, 3.2, -1.1, 1.1),
+            # xticks = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+            # yticks = [-1.0, -0.5, 0.0, 0.5, 1.0],
+            yticklabelsvisible = i==1,
+            # limits = (0.5, 1.5, -3.0, -2.0),
+            # aspect = 3.7/3
+            # aspect = 1.0
+        )
+
+        # scatter!(ax1,
+        #     [0.0],
+        #     [0.0],
+        #     [0.0],
+        #     color = :black
+        # )
+
+        ν_plot = collect(LinRange(0.0, 2π, 400)) 
+
+        for (i, planet_classical) in enumerate(eachcol(planets_classical))
+            temp = repeat(planet_classical, 1, 400)
+            temp[6, :] .= ν_plot
+            temp = hcat(classical_to_cartesian.(eachcol(temp))...)
+
+            lines!(ax1,
+                temp[1, :],
+                temp[2, :],
+                temp[3, :],
+                # linestyle = :dashdot,
+                color = Makie.wong_colors()[[2, 1, 6][i]],
+                # alpha = 0.35,
+                label = ["Venus Orbit", "Earth Orbit", "Mars Orbit"][i]
+            )
+        end
+
+        for n in [i]
+            temp = deepcopy(p.id_journey[n])
+            temp[1] = -3
+
+            chosen_colors = cs[[findfirst(==(i), temp) for i in temp]]
+
+            for k in 1:p.segment_number[n]
+                x0 = p.x0[n][k]
+                xf = p.xf[n][k]
+
+                t_fine = collect(p.t_nodes[n][k][1]:1.0*day_scale:p.t_nodes[n][k][end])
+
+                if !(t_fine[end] ≈ p.t_nodes[n][k][end])
+                    push!(t_fine, p.t_nodes[n][k][end])
+                end
+
+                x_fine = integrate_trajectory(
+                    p.x0[n][k] .+ vcat([0.0, 0.0, 0.0], p.Δv0[n][k], [0.0]),
+                    t_fine;
+                    t_nodes = p.t_nodes[n][k],
+                    u_nodes = p.u_nodes[n][k],
+                    p.objective_config,
+                )
+
+                lines!(ax1,
+                    x_fine[1, :],
+                    x_fine[2, :],
+                    x_fine[3, :],
+                    color = :black,
+                    alpha = 0.8,
+                )
+                
+                scatter!(ax1,
+                    x0[1],
+                    x0[2],
+                    x0[3],
+                    color = chosen_colors[k],
+                    markersize = 10,
+                )
+
+                if k == p.segment_number[n]
+                    scatter!(ax1,
+                        xf[1],
+                        xf[2],
+                        xf[3],
+                        color = chosen_colors[k+1],
+                        markersize = 10,
+                    )
+                end
+
+                # lines!(ax1,
+                #     x_target_fine[1, :],
+                #     x_target_fine[2, :],
+                #     x_target_fine[3, :],
+                #     alpha = 0.2,
+                #     color = :black
+                # )
+
+                thrust_force = if p.objective_config == LoggedMassConfig()
+                    temp = exp.(p.x_nodes[n][k][7, 1:end-1])
+                    p.u_nodes[n][k][4, :] .* temp * thrust * m_scale * a_scale * 1e3
+                else
+                    p.u_nodes[n][k][4, :] * thrust * m_scale * a_scale * 1e3
+                end
+
+                sel = thrust_force .>= 0.01
+
+                thrust_vectors = stack(normalize.(eachcol(p.u_nodes[n][k][1:3, :]))).*thrust_force'
+
+                length_scale = 0.2
+
+                for i in collect(1:length(thrust_force))[sel]
+                    lines!(ax1,
+                        [p.x_nodes[n][k][1, i], p.x_nodes[n][k][1, i] + length_scale*thrust_vectors[1, i]],
+                        [p.x_nodes[n][k][2, i], p.x_nodes[n][k][2, i] + length_scale*thrust_vectors[2, i]],
+                        [p.x_nodes[n][k][3, i], p.x_nodes[n][k][3, i] + length_scale*thrust_vectors[3, i]],
+                        color = :black,
+                        alpha = 0.5,
+                        linewidth = 1,
+                    )
+                end
+            end
+
+                
+            deployments = sum(p.Δm0[n] .≈ -40/m_scale)
+
+            m_fuel = if typeof(p.objective_config) == LoggedMassConfig
+                m_scale*exp(p.x_nodes[n][1][7, 1]) - 500.0 - 40.0*deployments - (m_scale*exp(p.x_nodes[n][end][7, end]) - 500.0 + m_scale*p.Δm0[n][end])
+            else
+                m_scale*p.x_nodes[n][1][7, 1] - 500.0 - 40.0*deployments - (m_scale*p.x_nodes[n][end][7, end] - 500.0 + m_scale*p.Δm0[n][end])
+            end
+
+            m_returned = -m_scale*p.Δm0[n][end]
+
+            t_nodes_combined = vcat(
+                [p.t_nodes[n][k][1:end-1] .+ p.times_journey[n][k] for k in 1:length(p.x0[n])]...
+            )
+            u_nodes_combined = hcat(p.u_nodes[n]...)
+            x_nodes_combined = hcat([val[:, 1:end-1] for val in p.x_nodes[n]]...)
+
+            push!(t_nodes_combined, p.times_journey[end][end])
+            u_nodes_combined = hcat(u_nodes_combined, p.u_nodes[end][end][:, end])
+            x_nodes_combined = hcat(x_nodes_combined, p.x_nodes[end][end][:, end])
+
+            thrust_force = if p.objective_config == LoggedMassConfig()
+                temp = exp.(x_nodes_combined[7, :])
+                u_nodes_combined[4, :] .* temp * thrust * m_scale * a_scale * 1e3
+            else
+                u_nodes_combined[4, :] * thrust * m_scale * a_scale * 1e3
+            end
+        end
+    end
+
+
+    # axislegend(ax1, merge = true, unique = true, orientation = :horizontal)
+
+    # linkxaxes!(axs...)
+    resize_to_layout!(f)
+    display(f)
+
+    if !isnothing(output_file)
+        save(output_file, f)
+    end
+
+    return
+end
+
+
 function plot_trajectory_showcase(
     p::SequentialConvexProblem;
     output_file = nothing,
@@ -3012,10 +3201,13 @@ function plot_bip_solution_values(
 
     solution_indices = collect(1:mip_problem2.solutions)
 
-    bins = collect(10.0:0.5:40.0)
+    bins = collect(25.0:0.5:60.0)
+    # bins = collect(10.0:0.5:40.0)
+
+
     bin_centers = 0.5*(bins[1:end-1] + bins[2:end])
 
-    bin_counts_thresholded = [sum((mip_problem2.objective_solutions[thresholded_solutions].*v_scale .>= bins[i]) .& (mip_problem2.objective_solutions[thresholded_solutions].*v_scale .< bins[i+1])) for i in 1:length(bins)-1]
+    bin_counts_thresholded = [sum((mip_problem1.objective_solutions.*v_scale .>= bins[i]) .& (mip_problem1.objective_solutions.*v_scale .< bins[i+1])) for i in 1:length(bins)-1]
     
     bin_counts_not_thresholded = [sum((mip_problem2.objective_solutions[.!thresholded_solutions].*v_scale .>= bins[i]) .& (mip_problem2.objective_solutions[.!thresholded_solutions].*v_scale .< bins[i+1])) for i in 1:length(bins)-1]
 

@@ -78,14 +78,19 @@ print(latexify(df; fmt = "%.3f"))
 
 
 
-mip_problem = MixedIntegerProblem(id_subset, [3], [3])
+mip_problem = MixedIntegerProblem(
+    id_subset, 
+    [3], 
+    [3],
+    time_parameter_days = 175
+)
 mip_problem.cost_limit = 6/v_scale
 
 solve!(mip_problem;
     # self_cleaning = true,
     include_intermediate_transfer_cost = true,
     solutions_relative_allowance = 0.1,
-    solutions_count_maximum = 3
+    solutions_count_maximum = 3,
 )
 
 times_journey = mip_problem.times_journey
@@ -98,6 +103,7 @@ df = DataFrame(
 )
 
 print(latexify(df; fmt = "%.2f", side = [L"Time [MJD]"]))
+
 
 
 
@@ -122,6 +128,8 @@ p2 = SequentialConvexProblem(
     mass_overhead = 1.0/m_scale
 );
 
+p2.trust_region_factor = 0.01
+
 solve!(p2; 
     fixed_segments = false,
     fixed_rendezvous = true
@@ -135,17 +143,22 @@ p3 = SequentialConvexProblem(
     mass_overhead = 1.0/m_scale
 );
 
+p3.trust_region_factor = 0.01
+
 solve!(p3; 
     fixed_segments = false,
     fixed_rendezvous = false
 )
 
 
-plot_trajectory_and_thrust_profile_paper(
+plot_trajectory_paper_2(
     p3;
-    label_text = "Ship 1:\n10 deployments\n10 collections\n781.41 kg returned",
+    # label_text = "Ship 1:\n10 deployments\n10 collections\n781.41 kg returned",
     output_file = "output/plots/scp_example_individual.png"
 )
+
+
+temp = [64328.00,64848.95,64952.82,65137.31,69109.33,69256.70,69413.11,69791.29]
 
 
 plot_discretization_comparison(p1, p2, p3; output_file = "output/plots/discretization_comparison.png")
@@ -266,6 +279,10 @@ plot_bip_solution_values(
     mip_problem2; 
     output_file = "output/plots/bip_solution_values.png"
 )
+
+
+
+
 
 
 # id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])
@@ -578,11 +595,16 @@ plot_trajectory_paper(p; rotating = true, plot_3d = false, output_file = "output
 
 # plot_trajectory_paper(p; rotating = true, plot_3d = true)
 
-plot_trajectory_and_thrust_profile_paper(
+plot_trajectory_paper_2(
     p;
-    label_text = "Ship 1:\n10 deployments\n10 collections\n781.41 kg returned",
     output_file = "output/plots/individual_trajectory.png"
 )
+
+# plot_trajectory_and_thrust_profile_paper(
+#     p;
+#     label_text = "Ship 1:\n10 deployments\n10 collections\n781.41 kg returned",
+#     output_file = "output/plots/individual_trajectory.png"
+# )
 
 
 
@@ -775,8 +797,18 @@ id_journey_all, times_journey_all, mined_mass_all, penalised_mass_all, groups_al
     ]
 );
 
-
 penalised_mass_all = deepcopy(mined_mass_all)
+
+
+temp = is_self_cleaning.(id_journey_all)
+
+id_journey_all = id_journey_all[temp]
+penalised_mass_all = penalised_mass_all[temp]
+mined_mass_all = mined_mass_all[temp]
+groups_all = groups_all[temp]
+
+
+
 
 @time chosen_ships_all, average_mined_mass_all, average_penalised_mass_all, allowed_mined_mass_all = choose_best_ships(id_journey_all, penalised_mass_all, mined_mass_all, groups_all; max_ships = 50)
 
@@ -787,3 +819,54 @@ plot_solution_ships(
     max_mass = 800.0,
     output_file = "output/plots/ship_selection.png"
 )
+
+
+
+
+
+
+
+
+
+
+
+
+id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
+
+mip_problem1 = MixedIntegerProblem(id_subset, [10], [10]; time_parameter_days = 145)
+
+
+mip_problem1.cost_limit = 6/v_scale
+
+
+solve!(mip_problem1;
+    # self_cleaning = true,
+    include_intermediate_transfer_cost = true,
+    solutions_relative_allowance = 1000.0,
+    solutions_count_maximum = 10000,
+    time_limit_seconds = 600
+)
+
+
+mip_problem2 = MixedIntegerProblem(id_subset, [10], [10]; time_parameter_days = 145)
+
+
+mip_problem2.cost_limit = 60000/v_scale
+
+solve!(mip_problem2;
+    # self_cleaning = true,
+    include_intermediate_transfer_cost = true,
+    solutions_relative_allowance = 1000.0,
+    solutions_count_maximum = 10000,
+    time_limit_seconds = 300
+)
+
+
+
+plot_bip_solution_values(
+    mip_problem1, 
+    mip_problem2; 
+    output_file = "output/plots/bip_solution_values_2.png"
+)
+
+
