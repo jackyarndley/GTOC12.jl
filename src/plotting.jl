@@ -2445,14 +2445,14 @@ function plot_trajectory_and_thrust_profile_paper(
     label_text = ""
 )
 
-    f = Figure(size = (550, 700), backgroundcolor = :white, figure_padding = 2)
+    f = Figure(size = (1100, 700), backgroundcolor = :white, figure_padding = 2)
 
     if isnothing(solution_indices)
         solution_indices = collect(1:p.mixing_number)
     end
     
-    cs = ColorSchemes.tab10
-    # cs = ColorSchemes.tab20
+    # cs = ColorSchemes.tab10
+    cs = ColorSchemes.tab20
     # cs = ColorSchemes.tableau_miller_stone
 
     for i in 1:p.mixing_number
@@ -2692,7 +2692,7 @@ function plot_trajectory_paper_2(
     label_text = ""
 )
 
-    f = Figure(size = (500, 500), backgroundcolor = :white, figure_padding = 2)
+    f = Figure(size = (950, 500), backgroundcolor = :white, figure_padding = 2)
 
     if isnothing(solution_indices)
         solution_indices = collect(1:p.mixing_number)
