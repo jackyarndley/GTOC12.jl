@@ -1609,13 +1609,13 @@ function plot_discretization_comparison(
         text1 = [
             "Fixed Time",
             "Fixed Time",
-            "Dynamic Time",
+            "Adaptive Time",
         ]
 
         text2 = [
             "Fixed Discretization",
-            "Dynamic Discretization",
-            "Dynamic Discretization",
+            "Adaptive Discretization",
+            "Adaptive Discretization",
         ]
 
         text = "$(text1[i])\n$(text2[i])\n"
