@@ -1200,7 +1200,7 @@ function plot_graph_structure(
         layout=fixed_arc_layout,
         # size = (800, 800),
         edge_plottype=:beziersegments,
-        edge_color= (:black, 0.3),
+        edge_color= (:black, 0.24),
         edge_width=2,
         arrow_show = false,
         node_size = 0,
@@ -1492,25 +1492,27 @@ function plot_graph_structure_big(
     fixed_node_layout(_) = node_layout
     fixed_arc_layout(_) = arc_layout
 
-    graphplot!(ax, remaining_arc_graph, 
-        layout=fixed_arc_layout,
-        # size = (800, 800),
-        edge_plottype=:beziersegments,
-        edge_color= (:black, 0.08),
-        edge_width=2,
-        arrow_show = false,
-        node_size = 0,
-    )
+    if false
+        graphplot!(ax, remaining_arc_graph, 
+            layout=fixed_arc_layout,
+            # size = (800, 800),
+            edge_plottype=:beziersegments,
+            edge_color= (:black, 0.08),
+            edge_width=2,
+            arrow_show = false,
+            node_size = 0,
+        )
 
-    graphplot!(ax, pruned_arc_graph, 
-        layout=fixed_arc_layout,
-        # size = (800, 800),
-        edge_plottype=:beziersegments,
-        edge_color= (:black, 0.08),
-        edge_width=4,
-        arrow_show = false,
-        node_size = 0,
-    )
+        graphplot!(ax, pruned_arc_graph, 
+            layout=fixed_arc_layout,
+            # size = (800, 800),
+            edge_plottype=:beziersegments,
+            edge_color= (:black, 0.08),
+            edge_width=4,
+            arrow_show = false,
+            node_size = 0,
+        )
+    end
 
     for k in p.solutions:-1:1
     # for k in 1:p.solutions
