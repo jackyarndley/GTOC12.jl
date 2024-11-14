@@ -1026,7 +1026,8 @@ function plot_graph_structure(
     used_edge_expansion = 2.0
     # used_edge_expansion = 0.2
 
-    unused_edge_list = []
+    remaining_edge_list = []
+    pruned_edge_list = []
 
     used_edge_lists = [[] for _ in 1:p.solutions]
     used_edge_colors = [[] for _ in 1:p.solutions]
@@ -1055,9 +1056,9 @@ function plot_graph_structure(
 
     for stage in 1:p.deployment_arcs[selection_index]
         for i in 1:stage_size, j in 1:stage_size
-            if !plot_pruned || ((p.deployment_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
-                used_check = false
+            used_check = false
 
+            if !plot_pruned || ((p.deployment_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
                 temp = []
 
                 if plot_optimal_path
@@ -1080,8 +1081,13 @@ function plot_graph_structure(
                 end
 
                 if !used_check
-                    push!(unused_edge_list, (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
+                    push!(remaining_edge_list, (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
+                    used_check = true
                 end
+            end
+
+            if !used_check
+                push!(pruned_edge_list, (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
             end
         end
     end
@@ -1089,9 +1095,9 @@ function plot_graph_structure(
     collection_offset = length(node_layout)
 
     for i in 1:stage_size, j in 1:stage_size
-        if !plot_pruned || (p.intermediate_cost[selection_index][i, j] <= p.cost_limit)
-            used_check = false
+        used_check = false
 
+        if !plot_pruned || (p.intermediate_cost[selection_index][i, j] <= p.cost_limit)
             temp = []
 
             if plot_optimal_path
@@ -1114,8 +1120,13 @@ function plot_graph_structure(
             end
 
             if !used_check
-                push!(unused_edge_list, (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
+                push!(remaining_edge_list, (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
+                used_check = false
             end
+        end
+
+        if !used_check
+            push!(pruned_edge_list, (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
         end
     end
 
@@ -1129,9 +1140,9 @@ function plot_graph_structure(
 
     for stage in 1:p.collection_arcs[selection_index]
         for i in 1:stage_size, j in 1:stage_size
-            if !plot_pruned || ((p.collection_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
-                used_check = false
+            used_check = false
 
+            if !plot_pruned || ((p.collection_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
                 temp = []
 
                 if plot_optimal_path
@@ -1154,18 +1165,16 @@ function plot_graph_structure(
                 end
 
                 if !used_check
-                    push!(unused_edge_list, (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
+                    push!(remaining_edge_list, (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
+                    used_check = true
                 end
+            end
+
+            if !used_check
+                push!(pruned_edge_list, (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
             end
         end
     end
-
-    unused_arc_graph = SimpleDiGraph(length(arc_layout))
-
-    [add_edge!(unused_arc_graph, e) for e in unused_edge_list]
-
-    fixed_node_layout(_) = node_layout
-    fixed_arc_layout(_) = arc_layout
 
     f = Figure(size = figure_size, backgroundcolor = :white, figure_padding = 0)
 
@@ -1175,11 +1184,33 @@ function plot_graph_structure(
         # size = (800, 800),
     )
 
-    graphplot!(ax, unused_arc_graph, 
+    remaining_arc_graph = SimpleDiGraph(length(arc_layout))
+    pruned_arc_graph = SimpleDiGraph(length(arc_layout))
+
+    [add_edge!(remaining_arc_graph, e) for e in remaining_edge_list]
+    [add_edge!(pruned_arc_graph, e) for e in pruned_edge_list]
+
+    display(remaining_edge_list)
+    display(pruned_edge_list)
+
+    fixed_node_layout(_) = node_layout
+    fixed_arc_layout(_) = arc_layout
+
+    graphplot!(ax, remaining_arc_graph, 
         layout=fixed_arc_layout,
         # size = (800, 800),
         edge_plottype=:beziersegments,
-        edge_color= (:black, 0.1),
+        edge_color= (:black, 0.3),
+        edge_width=2,
+        arrow_show = false,
+        node_size = 0,
+    )
+
+    graphplot!(ax, pruned_arc_graph, 
+        layout=fixed_arc_layout,
+        # size = (800, 800),
+        edge_plottype=:beziersegments,
+        edge_color= (:black, 0.08),
         edge_width=2,
         arrow_show = false,
         node_size = 0,
@@ -1284,7 +1315,6 @@ function plot_graph_structure_big(
     selection_index = 1,
     figure_size = (900, 200)
 )
-
     stage_size = length(p.id_subset)
 
     stage_Δx = 0.1
@@ -1293,7 +1323,8 @@ function plot_graph_structure_big(
     # used_edge_expansion = 2.0
     used_edge_expansion = 0.2
 
-    unused_edge_list = []
+    remaining_edge_list = []
+    pruned_edge_list = []
 
     used_edge_lists = [[] for _ in 1:p.solutions]
     used_edge_colors = [[] for _ in 1:p.solutions]
@@ -1321,9 +1352,9 @@ function plot_graph_structure_big(
 
     for stage in 1:p.deployment_arcs[selection_index]
         for i in 1:stage_size, j in 1:stage_size
-            if !plot_pruned || ((p.deployment_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
-                used_check = false
+            used_check = false
 
+            if !plot_pruned || ((p.deployment_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
                 temp = []
 
                 if plot_optimal_path
@@ -1346,8 +1377,13 @@ function plot_graph_structure_big(
                 end
 
                 if !used_check
-                    push!(unused_edge_list, (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
+                    push!(remaining_edge_list, (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
+                    used_check = true
                 end
+            end
+
+            if !used_check
+                push!(pruned_edge_list, (2*(i + stage_size*(stage-1)), 2*(j + stage_size*stage) - 1))
             end
         end
     end
@@ -1355,9 +1391,9 @@ function plot_graph_structure_big(
     collection_offset = length(node_layout)
 
     for i in 1:stage_size, j in 1:stage_size
-        if !plot_pruned || (p.intermediate_cost[selection_index][i, j] <= p.cost_limit)
-            used_check = false
+        used_check = false
 
+        if !plot_pruned || (p.intermediate_cost[selection_index][i, j] <= p.cost_limit)
             temp = []
 
             if plot_optimal_path
@@ -1380,8 +1416,13 @@ function plot_graph_structure_big(
             end
 
             if !used_check
-                push!(unused_edge_list, (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
+                push!(remaining_edge_list, (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
+                used_check = false
             end
+        end
+
+        if !used_check
+            push!(pruned_edge_list, (2*(collection_offset - stage_size + i), 2*(collection_offset + j) - 1))
         end
     end
 
@@ -1395,9 +1436,9 @@ function plot_graph_structure_big(
 
     for stage in 1:p.collection_arcs[selection_index]
         for i in 1:stage_size, j in 1:stage_size
-            if !plot_pruned || ((p.collection_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
-                used_check = false
+            used_check = false
 
+            if !plot_pruned || ((p.collection_cost[selection_index][i, j, stage] <= p.cost_limit) && (i != j))
                 temp = []
 
                 if plot_optimal_path
@@ -1420,18 +1461,16 @@ function plot_graph_structure_big(
                 end
 
                 if !used_check
-                    push!(unused_edge_list, (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
+                    push!(remaining_edge_list, (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
+                    used_check = true
                 end
+            end
+
+            if !used_check
+                push!(pruned_edge_list, (2*(collection_offset + i + stage_size*(stage-1)), 2*(collection_offset + j + stage_size*stage) - 1))
             end
         end
     end
-
-    unused_arc_graph = SimpleDiGraph(length(arc_layout))
-
-    [add_edge!(unused_arc_graph, e) for e in unused_edge_list]
-
-    fixed_node_layout(_) = node_layout
-    fixed_arc_layout(_) = arc_layout
     
     f = Figure(size = figure_size, backgroundcolor = :white, figure_padding = 0)
 
@@ -1441,13 +1480,34 @@ function plot_graph_structure_big(
         # size = (800, 800),
     )
 
+    remaining_arc_graph = SimpleDiGraph(length(arc_layout))
+    pruned_arc_graph = SimpleDiGraph(length(arc_layout))
 
-    graphplot!(ax, unused_arc_graph, 
+    [add_edge!(remaining_arc_graph, e) for e in remaining_edge_list]
+    [add_edge!(pruned_arc_graph, e) for e in pruned_edge_list]
+
+    display(remaining_edge_list)
+    display(pruned_edge_list)
+
+    fixed_node_layout(_) = node_layout
+    fixed_arc_layout(_) = arc_layout
+
+    graphplot!(ax, remaining_arc_graph, 
         layout=fixed_arc_layout,
         # size = (800, 800),
         edge_plottype=:beziersegments,
         edge_color= (:black, 0.08),
         edge_width=2,
+        arrow_show = false,
+        node_size = 0,
+    )
+
+    graphplot!(ax, pruned_arc_graph, 
+        layout=fixed_arc_layout,
+        # size = (800, 800),
+        edge_plottype=:beziersegments,
+        edge_color= (:black, 0.08),
+        edge_width=4,
         arrow_show = false,
         node_size = 0,
     )

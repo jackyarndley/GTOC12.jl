@@ -180,6 +180,15 @@ mip_problem.cost_limit = 6/v_scale
 
 
 
+solve!(mip_problem;
+    # self_cleaning = true,
+    include_intermediate_transfer_cost = true,
+    solutions_relative_allowance = 0.1,
+    solutions_count_maximum = 3
+)
+
+
+
 plot_graph_structure(
     mip_problem;
     plot_pruned = false,
