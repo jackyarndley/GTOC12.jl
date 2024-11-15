@@ -2754,6 +2754,7 @@ function plot_trajectory_paper_2(
     label_text = ""
 )
 
+    # f = Figure(size = (550, 550), backgroundcolor = :white, figure_padding = 2)
     f = Figure(size = (950, 500), backgroundcolor = :white, figure_padding = 2)
 
     if isnothing(solution_indices)
@@ -2772,7 +2773,7 @@ function plot_trajectory_paper_2(
             f[1:4, i]; 
             xlabel = "x [AU]", 
             ylabel = i==1 ? "y [AU]" : "", 
-            limits = (-3.2, 3.2, -3.2, 3.2),
+            limits = (-3.4, 3.4, -3.4, 3.4),
             # limits = (-0.25, 3.2, -1.1, 1.1),
             # xticks = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
             # yticks = [-1.0, -0.5, 0.0, 0.5, 1.0],
@@ -2837,6 +2838,7 @@ function plot_trajectory_paper_2(
                     x_fine[3, :],
                     color = :black,
                     alpha = 0.8,
+                    label = "Trajectory"
                 )
                 
                 scatter!(ax1,
@@ -2918,10 +2920,18 @@ function plot_trajectory_paper_2(
                 u_nodes_combined[4, :] * thrust * m_scale * a_scale * 1e3
             end
         end
+
+        
+        axislegend(
+            ax1, 
+            merge = true, 
+            unique = true, 
+            orientation = :vertical,
+            # labelsize = 10
+        )
     end
 
 
-    # axislegend(ax1, merge = true, unique = true, orientation = :horizontal)
 
     # linkxaxes!(axs...)
     resize_to_layout!(f)

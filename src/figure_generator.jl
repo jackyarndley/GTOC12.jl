@@ -143,7 +143,7 @@ p3 = SequentialConvexProblem(
     mass_overhead = 1.0/m_scale
 );
 
-p3.trust_region_factor = 0.01
+p3.trust_region_factor = 0.05
 
 solve!(p3; 
     fixed_segments = false,
