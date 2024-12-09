@@ -40,9 +40,7 @@ custom_classical = stack(cartesian_to_classical.(
 
 
 
-scp_iterations = 20
-
-node_time_spacing = 5.0*day_scale
+scp_iterations = 50
 
 node_time_spacing = 348.79*day_scale/40
 # node_time_spacing = 689.5745203452379*day_scale/40
@@ -60,24 +58,22 @@ times_journey = [
 ]
 
 
-
+using COPT
 
 p = SequentialConvexProblem(
     id_journey, 
     times_journey;
     objective_config = LoggedMassConfig(),
-    trust_region_factor = 0.01
+    trust_region_factor = 0.01,
 );
 
-
-plot_trajectory(p)
-
-solve!(p; 
+@time solve!(p; 
     fixed_segments = true,
-    fixed_rendezvous = true
+    fixed_rendezvous = true,
+    maximum_mass = true
 )
 
-
+plot_trajectory(p)
 
 
 convert_logged_mass_to_mass!(p)

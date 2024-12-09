@@ -82,7 +82,8 @@ function SequentialConvexProblem(
     objective_config = LoggedMassConfig(),
     dynamical_error = 1e-6,
     trust_region_factor = 0.1,
-    mass_overhead = 0.01/m_scale
+    mass_overhead = 0.01/m_scale,
+    optimizer = Mosek.Optimizer
 )
     mixing_number = length(id_journey)
     segment_number = [length(id_journey[n]) - 1 for n in 1:mixing_number]
@@ -117,7 +118,7 @@ function SequentialConvexProblem(
         dynamical_error,
         mass_overhead,
         trust_region_factor,
-        Mosek.Optimizer
+        optimizer
     )
 
     for n in 1:p.mixing_number
@@ -345,9 +346,8 @@ function solve!(
     models = []
 
     for _ in 1:maximum(id_groups)
-        model = Model(p.optimizer)
+        model = Model(p.optimizer;add_bridges = false)
         set_silent(model)
-        set_attribute(model, "MSK_DPAR_INTPNT_CO_TOL_REL_GAP", 1e-8)
 
         push!(models, model)
     end
