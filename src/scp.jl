@@ -346,7 +346,7 @@ function solve!(
     models = []
 
     for _ in 1:maximum(id_groups)
-        model = Model(p.optimizer;add_bridges = false)
+        model = Model(p.optimizer)
         set_silent(model)
 
         push!(models, model)
