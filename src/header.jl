@@ -5,6 +5,7 @@ using Statistics
 using JuMP
 using MosekTools
 using Gurobi
+using HiGHS
 using DiffEqCallbacks
 using DifferentialEquations
 using ForwardDiff
