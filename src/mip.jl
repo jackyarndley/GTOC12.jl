@@ -82,6 +82,12 @@ function MixedIntegerProblem(
         for n in 1:mixing_number
     ]
 
+    display(intermediate_cost)
+
+    npzwrite("output/deployment_cost.npy", deployment_cost[1])
+    npzwrite("output/collection_cost.npy", collection_cost[1])
+    npzwrite("output/intermediate_cost.npy", intermediate_cost[1])
+
     return MixedIntegerProblem(
         nothing,
         times_journey,

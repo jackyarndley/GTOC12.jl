@@ -295,12 +295,13 @@ plot_bip_solution_values(
 
 
 # id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])
-# id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
-id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
+id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
+# id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
 
 
 mip_problem = MixedIntegerProblem(id_subset, [10], [10]; time_parameter_days = 145)
-mip_problem.cost_limit = 10/v_scale
+mip_problem.cost_limit = 100/v_scale
+# mip_problem.cost_limit = 10/v_scale
 # mip_problem.cost_limit = 8/v_scale
 
 
@@ -323,16 +324,20 @@ scp_problem_objectives = Vector{Float64}[]
 
 
 
-solution_number = 50
+solution_number = 1
 
 
 solve!(mip_problem;
     # self_cleaning = true,
     include_intermediate_transfer_cost = true,
     solutions_relative_allowance = 0.2,
-    solutions_count_maximum = 3*solution_number,
+    solutions_count_maximum = 1,
+    # solutions_count_maximum = 3*solution_number,
     time_limit_seconds = 300
 )
+
+
+
 
 
 push!(mip_problem_objectives, mip_problem.objective_solutions.*v_scale)
