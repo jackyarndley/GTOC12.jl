@@ -295,7 +295,7 @@ plot_bip_solution_values(
 
 
 # id_subset = sort([15184, 3241, 2032, 53592, 46418, 19702, 23056, 46751, 32088, 23987])
-id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
+# id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
 # id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817])
 
 
@@ -450,8 +450,8 @@ asteroids_cartesian_5day = ephemeris_cartesian_at(asteroids_classical, times_5da
 
 
 
-check_times_deploy = collect(convert_mjd_to_5day_time(64900):20:convert_mjd_to_5day_time(66500))
-check_times_collect = collect(convert_mjd_to_5day_time(68200):20:convert_mjd_to_5day_time(69000))
+check_times_deploy = collect(convert_mjd_to_5day_time(64900):100:convert_mjd_to_5day_time(66500))
+check_times_collect = collect(convert_mjd_to_5day_time(68200):100:convert_mjd_to_5day_time(69000))
 
 
 times_join_check = collect(convert_mjd_to_time(65000):100*day_scale:convert_mjd_to_time(69000))
@@ -460,13 +460,13 @@ asteroids_join_check = ephemeris_cartesian_at(asteroids_classical, times_join_ch
 id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
 
 
-while length(id_subset) < 100
-    print("Size: \n$(length(id_subset)), last ID: $(id_subset[end])")
+while length(id_subset) < 80
+    print("Size: $(length(id_subset)), last ID: $(id_subset[end])")
 
     temp = []
 
     for id in id_subset
-        temp10 = all_ids[[minimum(norm.(eachcol(a .- asteroids_join_check[1:3, id, :]))) for a in eachslice(asteroids_join_check[1:3, :, :], dims=2)] .<= 0.05]
+        temp10 = all_ids[[minimum(norm.(eachcol(a .- asteroids_join_check[1:3, id, :]))) for a in eachslice(asteroids_join_check[1:3, :, :], dims=2)] .<= 0.012]
 
         temp = unique(vcat(temp, temp10))
     end
@@ -490,14 +490,12 @@ while length(id_subset) < 100
 
     minimum_id = temp[argmin(average_minimum_dv)]
 
-    print(", lowest Δv = $(minimum(average_minimum_dv))")
+    print(", lowest Δv = $(minimum(average_minimum_dv))\n")
 
     push!(id_subset, minimum_id)
 end
 
-
-
-
+id_subset = [981, 1509, 2032, 2174, 2311, 2347, 2434, 2866, 3241, 3302, 3896, 5707, 6437, 6783, 7831, 8746, 9260, 9825, 10229, 10290, 11527, 12628, 13655, 13846, 15083, 15184, 17983, 19434, 19702, 20732, 22108, 23056, 23483, 23987, 24020, 24483, 25027, 26109, 27262, 27278, 28118, 28289, 28479, 29656, 30533, 32088, 32513, 33378, 33588, 35307, 36276, 37288, 37818, 38355, 38508, 39557, 40804, 43836, 45162, 45167, 46418, 46502, 46735, 46751, 47674, 47691, 47817, 48748, 49502, 49915, 50040, 51614, 51788, 53339, 53592, 53908, 55747, 55868, 56479, 57913]
 
 
 
