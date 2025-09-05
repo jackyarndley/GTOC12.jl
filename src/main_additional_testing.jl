@@ -58,7 +58,6 @@ times_journey = [
 ]
 
 
-using COPT
 
 p = SequentialConvexProblem(
     id_journey, 

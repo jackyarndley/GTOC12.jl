@@ -440,27 +440,22 @@ plot_trajectory(scp_problem; solution_indices = [1], plot_3d = false, rotating =
 
 
 
-# times_5day = collect(0:5*day_scale:maximum_time)
-# asteroids_cartesian_5day = ephemeris_cartesian_at(asteroids_classical, times_5day)
+times_5day = collect(0:5*day_scale:maximum_time)
+asteroids_cartesian_5day = ephemeris_cartesian_at(asteroids_classical, times_5day)
 
 
 
-# check_times_deploy = collect(convert_mjd_to_5day_time(64900):20:convert_mjd_to_5day_time(66500))
-# check_times_collect = collect(convert_mjd_to_5day_time(68200):20:convert_mjd_to_5day_time(69000))
+check_times_deploy = collect(convert_mjd_to_5day_time(64900):20:convert_mjd_to_5day_time(66500))
+check_times_collect = collect(convert_mjd_to_5day_time(68200):20:convert_mjd_to_5day_time(69000))
 
 
-# times_join_check = collect(convert_mjd_to_time(65000):100*day_scale:convert_mjd_to_time(69000))
-# asteroids_join_check = ephemeris_cartesian_at(asteroids_classical, times_join_check)
+times_join_check = collect(convert_mjd_to_time(65000):100*day_scale:convert_mjd_to_time(69000))
+asteroids_join_check = ephemeris_cartesian_at(asteroids_classical, times_join_check)
+
+id_subset = sort([2032, 3241, 15184, 19702, 23056, 23987, 32088, 46418, 46751, 53592, 3896, 37818, 15083, 5707, 19434, 981, 48748, 40804, 23483, 47817, 2174, 28289, 43836, 39557, 9260, 17983, 13655, 22108, 3302, 57913])
 
 
-
-
-
-
-
-
-
-while length(id_subset) < 20
+while length(id_subset) < 100
     print("Size: \n$(length(id_subset)), last ID: $(id_subset[end])")
 
     temp = []
